@@ -2521,6 +2521,96 @@ function ItemsPage({ data, persist, onBack }) {
   );
 }
 
+/* ------------------------- EXPORT / IMPORT -------------------------- */
+/* Whole-save backup as a plain JSON file — no account, no network. The
+   only way data currently moves between devices. */
+
+function DataPanel({ data, persist }) {
+  const [message, setMessage] = useState(null);
+  const fileInputRef = useRef(null);
+
+  const exportData = () => {
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `crimpquest-export-${today()}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    setMessage({ type: "success", text: "Export downloaded." });
+  };
+
+  const triggerImport = () => fileInputRef.current?.click();
+
+  const handleImportFile = (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // clear so re-selecting the same file still fires onChange
+    if (!file) return;
+    setMessage(null);
+    const reader = new FileReader();
+    reader.onload = () => {
+      let parsed;
+      try {
+        parsed = JSON.parse(reader.result);
+      } catch {
+        setMessage({ type: "error", text: "That file isn't valid JSON." });
+        return;
+      }
+      if (!parsed || typeof parsed !== "object" || !parsed.profile || !Array.isArray(parsed.entries)) {
+        setMessage({ type: "error", text: "That doesn't look like a Crimp Quest export." });
+        return;
+      }
+      if (!window.confirm("This replaces everything on this device with the imported file. Continue?")) return;
+      persist(() => parsed);
+      setMessage({ type: "success", text: "Import complete." });
+    };
+    reader.onerror = () => setMessage({ type: "error", text: "Couldn't read that file." });
+    reader.readAsText(file);
+  };
+
+  return (
+    <Panel style={{ padding: 14, marginBottom: 14 }} accent={C.cyan}>
+      <div style={{ fontFamily: "'Press Start 2P', monospace", fontSize: 9, color: C.cyan, marginBottom: 4 }}>
+        EXPORT / IMPORT
+      </div>
+      <div style={{ fontFamily: "'VT323', monospace", fontSize: 14, color: C.boneDim, marginBottom: 12 }}>
+        Download your whole save — custom items included — as a file, or load one back in. Handy for
+        moving to a new device or keeping a backup. Doesn't sync automatically — you move the file
+        yourself.
+      </div>
+
+      {message && (
+        <div
+          style={{
+            fontFamily: "'VT323', monospace",
+            fontSize: 15,
+            color: message.type === "error" ? C.red : C.green,
+            marginBottom: 10,
+          }}
+        >
+          {message.text}
+        </div>
+      )}
+
+      <div style={{ display: "flex", gap: 8 }}>
+        <Btn onClick={exportData} color={C.cyan} small>
+          Export data
+        </Btn>
+        <Btn onClick={triggerImport} color={C.panelHi} small>
+          Import data
+        </Btn>
+      </div>
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="application/json"
+        style={{ display: "none" }}
+        onChange={handleImportFile}
+      />
+    </Panel>
+  );
+}
+
 /* --------------------------- PROFILE ------------------------------- */
 
 function ProfileTab({ data, bw, persist }) {
@@ -3006,6 +3096,8 @@ function ProfileTab({ data, bw, persist }) {
           </div>
         </div>
       </Panel>
+
+      <DataPanel data={data} persist={persist} />
 
       <GearRack name={data.profile.name} lootItems={lootItems} equippedItems={data.equippedItems} />
 

@@ -2435,6 +2435,115 @@ function ItemsPage({ data, persist, onBack }) {
     );
   })()));
 }
+function DataPanel({
+  data,
+  persist
+}) {
+  const [message, setMessage] = useState(null);
+  const fileInputRef = useRef(null);
+  const exportData = () => {
+    const blob = new Blob([JSON.stringify(data, null, 2)], {
+      type: "application/json"
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `crimpquest-export-${today()}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    setMessage({
+      type: "success",
+      text: "Export downloaded."
+    });
+  };
+  const triggerImport = () => fileInputRef.current?.click();
+  const handleImportFile = e => {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // clear so re-selecting the same file still fires onChange
+    if (!file) return;
+    setMessage(null);
+    const reader = new FileReader();
+    reader.onload = () => {
+      let parsed;
+      try {
+        parsed = JSON.parse(reader.result);
+      } catch {
+        setMessage({
+          type: "error",
+          text: "That file isn't valid JSON."
+        });
+        return;
+      }
+      if (!parsed || typeof parsed !== "object" || !parsed.profile || !Array.isArray(parsed.entries)) {
+        setMessage({
+          type: "error",
+          text: "That doesn't look like a Crimp Quest export."
+        });
+        return;
+      }
+      if (!window.confirm("This replaces everything on this device with the imported file. Continue?")) return;
+      persist(() => parsed);
+      setMessage({
+        type: "success",
+        text: "Import complete."
+      });
+    };
+    reader.onerror = () => setMessage({
+      type: "error",
+      text: "Couldn't read that file."
+    });
+    reader.readAsText(file);
+  };
+  return /* @__PURE__ */ React.createElement(Panel, {
+    style: {
+      padding: 14,
+      marginBottom: 14
+    },
+    accent: C.cyan
+  }, /* @__PURE__ */ React.createElement("div", {
+    style: {
+      fontFamily: "'Press Start 2P', monospace",
+      fontSize: 9,
+      color: C.cyan,
+      marginBottom: 4
+    }
+  }, "EXPORT / IMPORT"), /* @__PURE__ */ React.createElement("div", {
+    style: {
+      fontFamily: "'VT323', monospace",
+      fontSize: 14,
+      color: C.boneDim,
+      marginBottom: 12
+    }
+  }, "Download your whole save — custom items included — as a file, or load one back in. Handy for moving to a new device or keeping a backup. Doesn't sync automatically — you move the file yourself."), message && /* @__PURE__ */ React.createElement("div", {
+    style: {
+      fontFamily: "'VT323', monospace",
+      fontSize: 15,
+      color: message.type === "error" ? C.red : C.green,
+      marginBottom: 10
+    }
+  }, message.text), /* @__PURE__ */ React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 8
+    }
+  }, /* @__PURE__ */ React.createElement(Btn, {
+    onClick: exportData,
+    color: C.cyan,
+    small: true
+  }, "Export data"), /* @__PURE__ */ React.createElement(Btn, {
+    onClick: triggerImport,
+    color: C.panelHi,
+    small: true
+  }, "Import data")), /* @__PURE__ */ React.createElement("input", {
+    ref: fileInputRef,
+    type: "file",
+    accept: "application/json",
+    style: {
+      display: "none"
+    },
+    onChange: handleImportFile
+  }));
+}
 function ProfileTab({ data, bw, persist }) {
   const [nameEdit, setNameEdit] = useState(data.profile.name || "CLIMBER");
   const earnedSet = new Set(TITLES.filter((t) => t.check(data, bw)).map((t) => t.id));
@@ -2763,7 +2872,7 @@ function ProfileTab({ data, bw, persist }) {
         )))
       );
     })());
-  })()), /* @__PURE__ */ React.createElement("div", { style: { marginTop: 16, paddingTop: 12, borderTop: `1px solid ${C.panelHi}` } }, /* @__PURE__ */ React.createElement(Btn, { onClick: resetItems, color: confirmingReset ? C.red : C.panelHi, small: true }, confirmingReset ? "Tap again to confirm reset" : "Reset items"), /* @__PURE__ */ React.createElement("div", { style: { fontFamily: "'VT323', monospace", fontSize: 13, color: C.boneDim, marginTop: 6 } }, "Clears all unlocked items and placed wall holds back to the starter set \u2014 use this if a catalog art update left you with stale images. Doesn't touch your benchmarks or training log."))), /* @__PURE__ */ React.createElement(GearRack, { name: data.profile.name, lootItems, equippedItems: data.equippedItems }), /* @__PURE__ */ React.createElement(Panel, { style: { padding: 14, marginBottom: 14 } }, /* @__PURE__ */ React.createElement(
+  })()), /* @__PURE__ */ React.createElement("div", { style: { marginTop: 16, paddingTop: 12, borderTop: `1px solid ${C.panelHi}` } }, /* @__PURE__ */ React.createElement(Btn, { onClick: resetItems, color: confirmingReset ? C.red : C.panelHi, small: true }, confirmingReset ? "Tap again to confirm reset" : "Reset items"), /* @__PURE__ */ React.createElement("div", { style: { fontFamily: "'VT323', monospace", fontSize: 13, color: C.boneDim, marginTop: 6 } }, "Clears all unlocked items and placed wall holds back to the starter set \u2014 use this if a catalog art update left you with stale images. Doesn't touch your benchmarks or training log."))), /* @__PURE__ */ React.createElement(DataPanel, { data, persist }), /* @__PURE__ */ React.createElement(GearRack, { name: data.profile.name, lootItems, equippedItems: data.equippedItems }), /* @__PURE__ */ React.createElement(Panel, { style: { padding: 14, marginBottom: 14 } }, /* @__PURE__ */ React.createElement(
     "div",
     {
       style: {
