@@ -920,6 +920,38 @@ const rollLoot = (tierKey = "standard", data) => {
     ...catalogItem ? { itemId: catalogItem.id, name: catalogItem.name, image: catalogItem.image, w: catalogItem.w, h: catalogItem.h } : {}
   };
 };
+const RARITY_UPGRADE = { common: "rare", rare: "epic", epic: "legendary" };
+const rollMergeResult = (selected, data) => {
+  const catalog = getEffectiveCatalog(data);
+  const rarity = selected[0].rarity;
+  const nextRarity = RARITY_UPGRADE[rarity];
+  const isHoldMerge = selected.every((i) => i.slot === "wall");
+  const gearSlots = LOOT_SLOTS.filter((s) => s !== "wall");
+  const slot = isHoldMerge ? "wall" : gearSlots[Math.floor(Math.random() * gearSlots.length)];
+  let isPrefab = false;
+  let effectiveRarity = nextRarity;
+  let candidates = null;
+  if (slot === "wall" && nextRarity === "legendary") {
+    const prefabs = catalog.wallPrefabs?.legendary;
+    if (prefabs && prefabs.length) {
+      isPrefab = true;
+      candidates = prefabs;
+    } else {
+      effectiveRarity = "epic";
+    }
+  }
+  if (!candidates) candidates = catalog[slot]?.[effectiveRarity];
+  const catalogItem = candidates && candidates.length ? candidates[Math.floor(Math.random() * candidates.length)] : null;
+  return {
+    id: uid(),
+    tier: "merge",
+    rarity: effectiveRarity,
+    slot,
+    isPrefab,
+    date: today(),
+    ...catalogItem ? { itemId: catalogItem.id, name: catalogItem.name, image: catalogItem.image, w: catalogItem.w, h: catalogItem.h } : {}
+  };
+};
 const overallLevel = (data, bw) => SCALE_ORDER.reduce((sum, k) => {
   const sc = SCALES[k];
   const best = bestFor(data.entries, sc, bw);
@@ -3040,14 +3072,18 @@ function LevelUpReveal({
     }
   }, "Tap anywhere to continue"));
 }
-function ProfileTab({ data, bw, persist }) {
+function ProfileTab({
+  data,
+  bw,
+  persist
+}) {
   const [nameEdit, setNameEdit] = useState(data.profile.name || "CLIMBER");
-  const earnedSet = new Set(TITLES.filter((t) => t.check(data, bw)).map((t) => t.id));
-  const equipped = data.profile.equippedTitleId && earnedSet.has(data.profile.equippedTitleId) ? TITLES.find((t) => t.id === data.profile.equippedTitleId) : null;
+  const earnedSet = new Set(TITLES.filter(t => t.check(data, bw)).map(t => t.id));
+  const equipped = data.profile.equippedTitleId && earnedSet.has(data.profile.equippedTitleId) ? TITLES.find(t => t.id === data.profile.equippedTitleId) : null;
   const xpBreakdown = trainingXPBreakdown(data, bw);
   const trainingLevel = trainingLevelFromXP(xpBreakdown.total);
   const lootItems = data.loot || [];
-  const daysActive = new Set((data.sessions || []).map((s) => s.date)).size;
+  const daysActive = new Set((data.sessions || []).map(s => s.date)).size;
   const questBonusWeeks = fullyCompletedQuestWeeks(data, bw);
   const rankUpEvents = totalRankUpEvents(data, bw);
   const earnedByTier = {
@@ -3056,11 +3092,13 @@ function ProfileTab({ data, bw, persist }) {
     rankup: rankUpEvents,
     holdbox: (data.loginDates || []).length
   };
+  // Legacy items (opened before tiers existed) have no .tier — treat them
+  // as standard so they still count against that pool rather than vanishing.
   const openedByTier = {
-    daily: lootItems.filter((i) => i.tier === "daily").length,
-    standard: lootItems.filter((i) => i.tier === "standard" || !i.tier).length,
-    rankup: lootItems.filter((i) => i.tier === "rankup").length,
-    holdbox: lootItems.filter((i) => i.tier === "holdbox").length
+    daily: lootItems.filter(i => i.tier === "daily").length,
+    standard: lootItems.filter(i => i.tier === "standard" || !i.tier).length,
+    rankup: lootItems.filter(i => i.tier === "rankup").length,
+    holdbox: lootItems.filter(i => i.tier === "holdbox").length
   };
   const unopenedByTier = {
     daily: Math.max(0, earnedByTier.daily - openedByTier.daily),
@@ -3069,10 +3107,15 @@ function ProfileTab({ data, bw, persist }) {
     holdbox: Math.max(0, earnedByTier.holdbox - openedByTier.holdbox)
   };
   const [revealItem, setRevealItem] = useState(null);
-  const openChest = (tierKey) => {
+  const openChest = tierKey => {
     if (unopenedByTier[tierKey] <= 0) return;
+    // Rolled once here (not inside persist's updater) so the reveal shows
+    // exactly the item that got saved, not a second independent roll.
     const item = rollLoot(tierKey, data);
-    persist((prev) => ({ ...prev, loot: [...prev.loot || [], item] }));
+    persist(prev => ({
+      ...prev,
+      loot: [...(prev.loot || []), item]
+    }));
     setRevealItem(item);
   };
   const [confirmingReset, setConfirmingReset] = useState(false);
@@ -3081,411 +3124,717 @@ function ProfileTab({ data, bw, persist }) {
       setConfirmingReset(true);
       return;
     }
-    persist((prev) => ({ ...prev, loot: defaultLoot(), wallHolds: [] }));
+    persist(prev => ({
+      ...prev,
+      loot: defaultLoot(),
+      wallHolds: []
+    }));
     setConfirmingReset(false);
   };
   const [invFilterSlot, setInvFilterSlot] = useState("all");
   const [invFilterRarity, setInvFilterRarity] = useState("all");
   const [invSelectedId, setInvSelectedId] = useState(null);
   const equippedItems = data.equippedItems || {};
-  const equipGearItem = (item) => {
-    persist((prev) => ({ ...prev, equippedItems: { ...prev.equippedItems || {}, [item.slot]: item.id } }));
+  const equipGearItem = item => {
+    persist(prev => ({
+      ...prev,
+      equippedItems: {
+        ...(prev.equippedItems || {}),
+        [item.slot]: item.id
+      }
+    }));
   };
-  const unequipGearSlot = (slotKey) => {
-    persist((prev) => {
-      const next = { ...prev.equippedItems || {} };
+  const unequipGearSlot = slotKey => {
+    persist(prev => {
+      const next = {
+        ...(prev.equippedItems || {})
+      };
       delete next[slotKey];
-      return { ...prev, equippedItems: next };
+      return {
+        ...prev,
+        equippedItems: next
+      };
     });
+  };
+  const [mergeMode, setMergeMode] = useState(false);
+  const [mergeSelected, setMergeSelected] = useState([]);
+  const toggleMergeMode = () => {
+    setMergeMode(m => !m);
+    setMergeSelected([]);
+    setInvSelectedId(null);
+  };
+  const toggleMergeSelect = id => {
+    setMergeSelected(prev => {
+      if (prev.includes(id)) return prev.filter(x => x !== id);
+      if (prev.length >= 5) return prev;
+      return [...prev, id];
+    });
+  };
+  const mergeSelectedItems = lootItems.filter(i => mergeSelected.includes(i.id));
+  let mergeError = "";
+  if (mergeSelectedItems.length === 5) {
+    const mergeRarity = mergeSelectedItems[0].rarity;
+    if (mergeRarity === "legendary") mergeError = "Legendary items can't be merged.";else if (!mergeSelectedItems.every(i => i.rarity === mergeRarity)) mergeError = "All 5 must be the same rarity.";else {
+      const isHold = mergeSelectedItems.every(i => i.slot === "wall");
+      const isGear = mergeSelectedItems.every(i => i.slot !== "wall");
+      if (!isHold && !isGear) mergeError = "Wall holds can only merge with other wall holds.";
+    }
+  }
+  const canMerge = mergeSelectedItems.length === 5 && !mergeError;
+  const doMerge = () => {
+    if (!canMerge) return;
+    const removeIds = new Set(mergeSelectedItems.map(i => i.id));
+    const merged = rollMergeResult(mergeSelectedItems, data);
+    persist(prev => ({
+      ...prev,
+      loot: [...(prev.loot || []).filter(i => !removeIds.has(i.id)), merged]
+    }));
+    setRevealItem(merged);
+    setMergeSelected([]);
+    setMergeMode(false);
   };
   const saveName = () => {
     const v = nameEdit.trim() || "CLIMBER";
-    persist((prev) => ({ ...prev, profile: { ...prev.profile, name: v } }));
-  };
-  const toggleEquip = (id) => {
-    persist((prev) => ({
+    persist(prev => ({
       ...prev,
-      profile: { ...prev.profile, equippedTitleId: prev.profile.equippedTitleId === id ? null : id }
+      profile: {
+        ...prev.profile,
+        name: v
+      }
+    }));
+  };
+  const toggleEquip = id => {
+    persist(prev => ({
+      ...prev,
+      profile: {
+        ...prev.profile,
+        equippedTitleId: prev.profile.equippedTitleId === id ? null : id
+      }
     }));
   };
   const toggleGymAccess = () => {
-    persist((prev) => ({ ...prev, profile: { ...prev.profile, gymAccess: !prev.profile.gymAccess } }));
+    persist(prev => ({
+      ...prev,
+      profile: {
+        ...prev.profile,
+        gymAccess: !prev.profile.gymAccess
+      }
+    }));
   };
   const currentWeek = weekKeyOf(today());
   const questRecords = data.quests || [];
-  const thisWeekRecord = questRecords.find((r) => r.weekKey === currentWeek);
-  const thisWeekQuests = thisWeekRecord ? thisWeekRecord.questIds.map((id) => QUEST_POOL.find((q) => q.id === id)).filter(Boolean) : [];
-  const completedThisWeek = thisWeekQuests.filter((q) => q.check(data, bw, currentWeek));
-  const pastWeeks = questRecords.filter((r) => r.weekKey !== currentWeek).sort((a, b) => a.weekKey < b.weekKey ? 1 : -1).slice(0, 4).map((r) => {
-    const defs = r.questIds.map((id) => QUEST_POOL.find((q) => q.id === id)).filter(Boolean);
-    const done = defs.filter((q) => q.check(data, bw, r.weekKey)).length;
-    return { weekKey: r.weekKey, done, total: defs.length };
+  const thisWeekRecord = questRecords.find(r => r.weekKey === currentWeek);
+  const thisWeekQuests = thisWeekRecord ? thisWeekRecord.questIds.map(id => QUEST_POOL.find(q => q.id === id)).filter(Boolean) : [];
+  const completedThisWeek = thisWeekQuests.filter(q => q.check(data, bw, currentWeek));
+  const pastWeeks = questRecords.filter(r => r.weekKey !== currentWeek).sort((a, b) => a.weekKey < b.weekKey ? 1 : -1).slice(0, 4).map(r => {
+    const defs = r.questIds.map(id => QUEST_POOL.find(q => q.id === id)).filter(Boolean);
+    const done = defs.filter(q => q.check(data, bw, r.weekKey)).length;
+    return {
+      weekKey: r.weekKey,
+      done,
+      total: defs.length
+    };
   });
-  return /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement(Panel, { style: { padding: 16, marginBottom: 14 }, accent: C.gold }, /* @__PURE__ */ React.createElement(Field, { label: "NAME" }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 8 } }, /* @__PURE__ */ React.createElement(
-    "input",
-    {
-      style: inputStyle,
-      value: nameEdit,
-      maxLength: 16,
-      onChange: (e) => setNameEdit(e.target.value)
+  return /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement(Panel, {
+    style: {
+      padding: 16,
+      marginBottom: 14
+    },
+    accent: C.gold
+  }, /* @__PURE__ */ React.createElement(Field, {
+    label: "NAME"
+  }, /* @__PURE__ */ React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 8
     }
-  ), /* @__PURE__ */ React.createElement(Btn, { onClick: saveName, color: C.cyan, small: true }, "SET"))), /* @__PURE__ */ React.createElement(
-    "div",
-    {
-      style: {
-        fontFamily: "'VT323', monospace",
-        fontSize: 15,
-        color: C.boneDim,
-        marginBottom: 6
-      }
-    },
-    "EQUIPPED TITLE"
-  ), equipped ? /* @__PURE__ */ React.createElement(
-    "span",
-    {
-      style: {
-        fontFamily: "'Press Start 2P', monospace",
-        fontSize: 11,
-        background: RARITY[equipped.rarity].color,
-        color: C.bgDeep,
-        padding: "8px 10px",
-        display: "inline-block"
-      }
-    },
-    equipped.name
-  ) : /* @__PURE__ */ React.createElement("div", { style: { fontFamily: "'VT323', monospace", fontSize: 18, color: C.boneDim } }, "None equipped \u2014 pick one below.")), /* @__PURE__ */ React.createElement(GearRack, { name: data.profile.name, lootItems, equippedItems: data.equippedItems }), /* @__PURE__ */ React.createElement(Panel, { style: { padding: 14, marginBottom: 14 }, accent: C.cyan }, /* @__PURE__ */ React.createElement(
-    "div",
-    {
-      style: {
-        display: "flex",
-        justifyContent: "space-between",
-        alignItems: "baseline",
-        marginBottom: 4
-      }
-    },
-    /* @__PURE__ */ React.createElement("span", { style: { fontFamily: "'Press Start 2P', monospace", fontSize: 10, color: C.cyan } }, "WEEKLY QUESTS"),
-    /* @__PURE__ */ React.createElement("span", { style: { fontFamily: "'VT323', monospace", fontSize: 16, color: C.boneDim } }, completedThisWeek.length, "/", thisWeekQuests.length)
-  ), /* @__PURE__ */ React.createElement("div", { style: { fontFamily: "'VT323', monospace", fontSize: 14, color: C.boneDim, marginBottom: 10 } }, "Any order, any day this week \u2014 no rush."), /* @__PURE__ */ React.createElement(
-    XPBar,
-    {
-      pct: thisWeekQuests.length ? completedThisWeek.length / thisWeekQuests.length : 0,
-      color: C.cyan,
-      segments: 5
+  }, /* @__PURE__ */ React.createElement("input", {
+    style: inputStyle,
+    value: nameEdit,
+    maxLength: 16,
+    onChange: e => setNameEdit(e.target.value)
+  }), /* @__PURE__ */ React.createElement(Btn, {
+    onClick: saveName,
+    color: C.cyan,
+    small: true
+  }, "SET"))), /* @__PURE__ */ React.createElement("div", {
+    style: {
+      fontFamily: "'VT323', monospace",
+      fontSize: 15,
+      color: C.boneDim,
+      marginBottom: 6
     }
-  ), /* @__PURE__ */ React.createElement("div", { style: { marginTop: 14 } }, thisWeekQuests.map((q) => {
+  }, "EQUIPPED TITLE"), equipped ? /* @__PURE__ */ React.createElement("span", {
+    style: {
+      fontFamily: "'Press Start 2P', monospace",
+      fontSize: 11,
+      background: RARITY[equipped.rarity].color,
+      color: C.bgDeep,
+      padding: "8px 10px",
+      display: "inline-block"
+    }
+  }, equipped.name) : /* @__PURE__ */ React.createElement("div", {
+    style: {
+      fontFamily: "'VT323', monospace",
+      fontSize: 18,
+      color: C.boneDim
+    }
+  }, "None equipped — pick one below.")), /* @__PURE__ */ React.createElement(GearRack, {
+    name: data.profile.name,
+    lootItems: lootItems,
+    equippedItems: data.equippedItems
+  }), /* @__PURE__ */ React.createElement(Panel, {
+    style: {
+      padding: 14,
+      marginBottom: 14
+    },
+    accent: C.cyan
+  }, /* @__PURE__ */ React.createElement("div", {
+    style: {
+      display: "flex",
+      justifyContent: "space-between",
+      alignItems: "baseline",
+      marginBottom: 4
+    }
+  }, /* @__PURE__ */ React.createElement("span", {
+    style: {
+      fontFamily: "'Press Start 2P', monospace",
+      fontSize: 10,
+      color: C.cyan
+    }
+  }, "WEEKLY QUESTS"), /* @__PURE__ */ React.createElement("span", {
+    style: {
+      fontFamily: "'VT323', monospace",
+      fontSize: 16,
+      color: C.boneDim
+    }
+  }, completedThisWeek.length, "/", thisWeekQuests.length)), /* @__PURE__ */ React.createElement("div", {
+    style: {
+      fontFamily: "'VT323', monospace",
+      fontSize: 14,
+      color: C.boneDim,
+      marginBottom: 10
+    }
+  }, "Any order, any day this week — no rush."), /* @__PURE__ */ React.createElement(XPBar, {
+    pct: thisWeekQuests.length ? completedThisWeek.length / thisWeekQuests.length : 0,
+    color: C.cyan,
+    segments: 5
+  }), /* @__PURE__ */ React.createElement("div", {
+    style: {
+      marginTop: 14
+    }
+  }, thisWeekQuests.map(q => {
     const done = completedThisWeek.includes(q);
-    return /* @__PURE__ */ React.createElement(
-      "div",
-      {
-        key: q.id,
-        style: {
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          gap: 8,
-          padding: "9px 0",
-          borderBottom: `1px solid ${C.panelHi}`,
-          opacity: done ? 1 : 0.85
-        }
-      },
-      /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8 } }, /* @__PURE__ */ React.createElement(
-        "span",
-        {
-          style: {
-            fontFamily: "'Press Start 2P', monospace",
-            fontSize: 10,
-            color: done ? C.green : C.boneDim,
-            width: 14
-          }
-        },
-        done ? "\u2713" : "\u25CB"
-      ), /* @__PURE__ */ React.createElement(
-        "span",
-        {
-          style: {
-            fontFamily: "'VT323', monospace",
-            fontSize: 17,
-            color: done ? C.boneDim : C.bone,
-            textDecoration: done ? "line-through" : "none"
-          }
-        },
-        q.text
-      )),
-      /* @__PURE__ */ React.createElement(
-        "span",
-        {
-          style: {
-            fontFamily: "'Press Start 2P', monospace",
-            fontSize: 9,
-            color: done ? C.green : C.cyan,
-            whiteSpace: "nowrap"
-          }
-        },
-        "+",
-        q.xp
-      )
-    );
-  })), /* @__PURE__ */ React.createElement("div", { style: { marginTop: 14, paddingTop: 12, borderTop: `1px solid ${C.panelHi}` } }, data.profile.gymAccess ? /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("div", { style: { fontFamily: "'VT323', monospace", fontSize: 15, color: C.boneDim, marginBottom: 8 } }, "Gym-based quests unlocked."), /* @__PURE__ */ React.createElement(Btn, { onClick: toggleGymAccess, color: C.panelHi, small: true }, "Lost gym access again")) : /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("div", { style: { fontFamily: "'VT323', monospace", fontSize: 15, color: C.boneDim, marginBottom: 8 } }, "\u{1F512} Gym-based quests locked \u2014 only hangboard/weighted training right now."), /* @__PURE__ */ React.createElement(Btn, { onClick: toggleGymAccess, color: C.cyan, small: true }, "I'm back in the gym"))), pastWeeks.length > 0 && /* @__PURE__ */ React.createElement("div", { style: { marginTop: 14, paddingTop: 12, borderTop: `1px solid ${C.panelHi}` } }, /* @__PURE__ */ React.createElement("div", { style: { fontFamily: "'VT323', monospace", fontSize: 14, color: C.boneDim, marginBottom: 6 } }, "PAST WEEKS"), pastWeeks.map((w) => /* @__PURE__ */ React.createElement(
-    "div",
-    {
-      key: w.weekKey,
+    return /* @__PURE__ */ React.createElement("div", {
+      key: q.id,
       style: {
         display: "flex",
         justifyContent: "space-between",
-        fontFamily: "'VT323', monospace",
-        fontSize: 15,
-        color: C.boneDim,
-        padding: "3px 0"
+        alignItems: "center",
+        gap: 8,
+        padding: "9px 0",
+        borderBottom: `1px solid ${C.panelHi}`,
+        opacity: done ? 1 : 0.85
       }
-    },
-    /* @__PURE__ */ React.createElement("span", null, "Week ", w.weekKey.split("-")[1]),
-    /* @__PURE__ */ React.createElement("span", null, w.done, "/", w.total, " completed")
-  )))), /* @__PURE__ */ React.createElement(Panel, { style: { padding: 14, marginBottom: 14 }, accent: C.gold }, /* @__PURE__ */ React.createElement("span", { style: { fontFamily: "'Press Start 2P', monospace", fontSize: 10, color: C.gold } }, "LOOT"), /* @__PURE__ */ React.createElement("div", { style: { fontFamily: "'VT323', monospace", fontSize: 14, color: C.boneDim, margin: "6px 0 14px" } }, "Three chest tiers, each earned a different way. Drops are cosmetic items \u2014 banked now, spendable on the Gear Rack and Spray Wall."), [
-    {
-      tier: CHEST_TIERS.daily,
-      desc: "First session of the day. Never legendary.",
-      earned: earnedByTier.daily
-    },
-    {
-      tier: CHEST_TIERS.standard,
-      desc: "1 per Training Level, +1 per full quest week.",
-      earned: earnedByTier.standard
-    },
-    {
-      tier: CHEST_TIERS.rankup,
-      desc: "1 per new rank. No commons \u2014 mostly epic/legendary.",
-      earned: earnedByTier.rankup
-    },
-    {
-      tier: CHEST_TIERS.holdbox,
-      desc: "1 per day you open the app. Holds & prefabs only.",
-      earned: earnedByTier.holdbox
-    }
-  ].map(({ tier, desc }) => /* @__PURE__ */ React.createElement("div", { key: tier.key, style: { marginBottom: 14, paddingBottom: 14, borderBottom: `1px solid ${C.panelHi}` } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4 } }, /* @__PURE__ */ React.createElement("span", { style: { display: "flex", alignItems: "center", gap: 8 } }, tier.image && /* @__PURE__ */ React.createElement("img", { src: tier.image, alt: "", style: { width: 28, height: 28, objectFit: "contain", imageRendering: "pixelated" } }), /* @__PURE__ */ React.createElement("span", { style: { fontFamily: "'Press Start 2P', monospace", fontSize: 9, color: tier.color } }, tier.label)), /* @__PURE__ */ React.createElement("span", { style: { fontFamily: "'VT323', monospace", fontSize: 15, color: C.boneDim } }, unopenedByTier[tier.key], " unopened")), /* @__PURE__ */ React.createElement("div", { style: { fontFamily: "'VT323', monospace", fontSize: 13, color: C.boneDim, marginBottom: 8 } }, desc), /* @__PURE__ */ React.createElement(
-    Btn,
-    {
-      onClick: () => openChest(tier.key),
-      color: tier.color,
-      disabled: unopenedByTier[tier.key] <= 0,
-      full: true
-    },
-    unopenedByTier[tier.key] > 0 ? `Open (${unopenedByTier[tier.key]} left)` : "No chests to open"
-  ))), lootItems.length > 0 && /* @__PURE__ */ React.createElement("div", { style: { marginTop: 16 } }, /* @__PURE__ */ React.createElement(
-    "div",
-    {
+    }, /* @__PURE__ */ React.createElement("div", {
+      style: {
+        display: "flex",
+        alignItems: "center",
+        gap: 8
+      }
+    }, /* @__PURE__ */ React.createElement("span", {
       style: {
         fontFamily: "'Press Start 2P', monospace",
-        fontSize: 8,
-        color: C.boneDim,
-        marginBottom: 8
+        fontSize: 10,
+        color: done ? C.green : C.boneDim,
+        width: 14
       }
-    },
-    "INVENTORY \u2014 ",
-    lootItems.length
-  ), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 6 } }, [["all", "ALL"], ...GEAR_SLOTS.map((s) => [s.key, s.label]), ["wall", "WALL"]].map(
-    ([key, label]) => /* @__PURE__ */ React.createElement(
-      Btn,
-      {
-        key,
-        small: true,
-        color: invFilterSlot === key ? C.cyan : C.panelHi,
-        onClick: () => setInvFilterSlot(key)
-      },
-      label
-    )
-  )), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 10 } }, [["all", "ALL"], ["common", "COMMON"], ["rare", "RARE"], ["epic", "EPIC"], ["legendary", "LEGENDARY"]].map(
-    ([key, label]) => /* @__PURE__ */ React.createElement(
-      Btn,
-      {
-        key,
-        small: true,
-        color: invFilterRarity === key ? key === "all" ? C.cyan : RARITY[key].color : C.panelHi,
-        onClick: () => setInvFilterRarity(key)
-      },
-      label
-    )
-  )), (() => {
-    const invFiltered = lootItems.filter((item) => invFilterSlot === "all" || item.slot === invFilterSlot).filter((item) => invFilterRarity === "all" || item.rarity === invFilterRarity).slice().sort((a, b) => a.date < b.date ? 1 : -1);
-    return /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement(
-      "div",
-      {
-        style: {
-          maxHeight: 220,
-          overflowY: "auto",
-          border: `1px solid ${C.panelHi}`,
-          padding: 8
-        }
-      },
-      invFiltered.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: { fontFamily: "'VT323', monospace", fontSize: 15, color: C.boneDim } }, "Nothing matches these filters.") : /* @__PURE__ */ React.createElement("div", { style: { display: "flex", flexWrap: "wrap", gap: 6 } }, invFiltered.map((item) => /* @__PURE__ */ React.createElement(
-        "button",
-        {
-          key: item.id,
-          onClick: () => setInvSelectedId(invSelectedId === item.id ? null : item.id),
-          title: item.name,
-          style: {
-            width: 48,
-            height: 48,
-            border: `2px solid ${invSelectedId === item.id ? C.cyan : RARITY[item.rarity].color}`,
-            background: C.bgDeep,
-            padding: 3,
-            cursor: "pointer",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center"
-          }
-        },
-        item.image ? /* @__PURE__ */ React.createElement(
-          "img",
-          {
-            src: item.image,
-            alt: item.name,
-            style: { maxWidth: "100%", maxHeight: "100%", objectFit: "contain", imageRendering: "pixelated" }
-          }
-        ) : /* @__PURE__ */ React.createElement("span", { style: { fontFamily: "'Press Start 2P', monospace", fontSize: 14, color: C.boneDim } }, "?")
-      )))
-    ), invSelectedId && (() => {
-      const item = invFiltered.find((i) => i.id === invSelectedId);
-      if (!item) return null;
-      const canEquip = GEAR_SLOTS.some((s) => s.key === item.slot);
-      const isEquipped = equippedItems[item.slot] === item.id;
-      return /* @__PURE__ */ React.createElement(
-        "div",
-        {
-          style: {
-            marginTop: 10,
-            paddingTop: 10,
-            borderTop: `1px solid ${C.panelHi}`,
-            display: "flex",
-            alignItems: "center",
-            gap: 12
-          }
-        },
-        item.image && /* @__PURE__ */ React.createElement(
-          "img",
-          {
-            src: item.image,
-            alt: item.name,
-            style: { width: 48, height: 48, objectFit: "contain", imageRendering: "pixelated", flexShrink: 0 }
-          }
-        ),
-        /* @__PURE__ */ React.createElement("div", { style: { flex: 1, minWidth: 0 } }, /* @__PURE__ */ React.createElement("div", { style: { fontFamily: "'VT323', monospace", fontSize: 17, color: C.bone } }, item.name || `${GEAR_SLOTS.find((s) => s.key === item.slot)?.label || item.slot.toUpperCase()} TOKEN`), /* @__PURE__ */ React.createElement("div", { style: { fontFamily: "'VT323', monospace", fontSize: 13, color: RARITY[item.rarity].color } }, RARITY[item.rarity].label), canEquip && /* @__PURE__ */ React.createElement("div", { style: { marginTop: 6 } }, /* @__PURE__ */ React.createElement(
-          Btn,
-          {
-            small: true,
-            color: isEquipped ? C.gold : C.cyan,
-            onClick: () => isEquipped ? unequipGearSlot(item.slot) : equipGearItem(item)
-          },
-          isEquipped ? "Equipped \u2014 tap for auto" : "Equip to Gear Rack"
-        )))
-      );
-    })());
-  })()), /* @__PURE__ */ React.createElement("div", { style: { marginTop: 16, paddingTop: 12, borderTop: `1px solid ${C.panelHi}` } }, /* @__PURE__ */ React.createElement(Btn, { onClick: resetItems, color: confirmingReset ? C.red : C.panelHi, small: true }, confirmingReset ? "Tap again to confirm reset" : "Reset items"), /* @__PURE__ */ React.createElement("div", { style: { fontFamily: "'VT323', monospace", fontSize: 13, color: C.boneDim, marginTop: 6 } }, "Clears all unlocked items and placed wall holds back to the starter set \u2014 use this if a catalog art update left you with stale images. Doesn't touch your benchmarks or training log."))), /* @__PURE__ */ React.createElement(Panel, { style: { padding: 14, marginBottom: 14 } }, /* @__PURE__ */ React.createElement(
-    "div",
-    {
+    }, done ? "✓" : "○"), /* @__PURE__ */ React.createElement("span", {
+      style: {
+        fontFamily: "'VT323', monospace",
+        fontSize: 17,
+        color: done ? C.boneDim : C.bone,
+        textDecoration: done ? "line-through" : "none"
+      }
+    }, q.text)), /* @__PURE__ */ React.createElement("span", {
       style: {
         fontFamily: "'Press Start 2P', monospace",
         fontSize: 9,
-        color: C.magenta,
-        marginBottom: 12
+        color: done ? C.green : C.cyan,
+        whiteSpace: "nowrap"
       }
+    }, "+", q.xp));
+  })), /* @__PURE__ */ React.createElement("div", {
+    style: {
+      marginTop: 14,
+      paddingTop: 12,
+      borderTop: `1px solid ${C.panelHi}`
+    }
+  }, data.profile.gymAccess ? /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("div", {
+    style: {
+      fontFamily: "'VT323', monospace",
+      fontSize: 15,
+      color: C.boneDim,
+      marginBottom: 8
+    }
+  }, "Gym-based quests unlocked."), /* @__PURE__ */ React.createElement(Btn, {
+    onClick: toggleGymAccess,
+    color: C.panelHi,
+    small: true
+  }, "Lost gym access again")) : /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("div", {
+    style: {
+      fontFamily: "'VT323', monospace",
+      fontSize: 15,
+      color: C.boneDim,
+      marginBottom: 8
+    }
+  }, "🔒 Gym-based quests locked — only hangboard/weighted training right now."), /* @__PURE__ */ React.createElement(Btn, {
+    onClick: toggleGymAccess,
+    color: C.cyan,
+    small: true
+  }, "I'm back in the gym"))), pastWeeks.length > 0 && /* @__PURE__ */ React.createElement("div", {
+    style: {
+      marginTop: 14,
+      paddingTop: 12,
+      borderTop: `1px solid ${C.panelHi}`
+    }
+  }, /* @__PURE__ */ React.createElement("div", {
+    style: {
+      fontFamily: "'VT323', monospace",
+      fontSize: 14,
+      color: C.boneDim,
+      marginBottom: 6
+    }
+  }, "PAST WEEKS"), pastWeeks.map(w => /* @__PURE__ */ React.createElement("div", {
+    key: w.weekKey,
+    style: {
+      display: "flex",
+      justifyContent: "space-between",
+      fontFamily: "'VT323', monospace",
+      fontSize: 15,
+      color: C.boneDim,
+      padding: "3px 0"
+    }
+  }, /* @__PURE__ */ React.createElement("span", null, "Week ", w.weekKey.split("-")[1]), /* @__PURE__ */ React.createElement("span", null, w.done, "/", w.total, " completed"))))), /* @__PURE__ */ React.createElement(Panel, {
+    style: {
+      padding: 14,
+      marginBottom: 14
     },
-    "TRAINING XP BREAKDOWN"
-  ), [
-    ["Sessions & benchmarks logged", xpBreakdown.activity, `capped at ${DAILY_ACTIVITY_XP_CAP}/day \u2014 rest days count too`],
-    ["New ranks reached", xpBreakdown.rankUps, `${RANK_UP_XP} XP each, once per new best`],
-    ["Weeks trained", xpBreakdown.consistency, `${CONSISTENCY_XP_PER_WEEK} XP per distinct week active`],
-    ["Weekly quests completed", xpBreakdown.quests, "varies per quest \u2014 see WEEKLY QUESTS above"]
-  ].map(([label, val, note]) => /* @__PURE__ */ React.createElement(
-    "div",
-    {
-      key: label,
+    accent: C.gold
+  }, /* @__PURE__ */ React.createElement("span", {
+    style: {
+      fontFamily: "'Press Start 2P', monospace",
+      fontSize: 10,
+      color: C.gold
+    }
+  }, "LOOT"), /* @__PURE__ */ React.createElement("div", {
+    style: {
+      fontFamily: "'VT323', monospace",
+      fontSize: 14,
+      color: C.boneDim,
+      margin: "6px 0 14px"
+    }
+  }, "Three chest tiers, each earned a different way. Drops are cosmetic items — banked now, spendable on the Gear Rack and Spray Wall."), [{
+    tier: CHEST_TIERS.daily,
+    desc: "First session of the day. Never legendary.",
+    earned: earnedByTier.daily
+  }, {
+    tier: CHEST_TIERS.standard,
+    desc: "1 per Training Level, +1 per full quest week.",
+    earned: earnedByTier.standard
+  }, {
+    tier: CHEST_TIERS.rankup,
+    desc: "1 per new rank. No commons — mostly epic/legendary.",
+    earned: earnedByTier.rankup
+  }, {
+    tier: CHEST_TIERS.holdbox,
+    desc: "1 per day you open the app. Holds & prefabs only.",
+    earned: earnedByTier.holdbox
+  }].map(({
+    tier,
+    desc
+  }) => /* @__PURE__ */ React.createElement("div", {
+    key: tier.key,
+    style: {
+      marginBottom: 14,
+      paddingBottom: 14,
+      borderBottom: `1px solid ${C.panelHi}`
+    }
+  }, /* @__PURE__ */ React.createElement("div", {
+    style: {
+      display: "flex",
+      justifyContent: "space-between",
+      alignItems: "baseline",
+      marginBottom: 4
+    }
+  }, /* @__PURE__ */ React.createElement("span", {
+    style: {
+      display: "flex",
+      alignItems: "center",
+      gap: 8
+    }
+  }, tier.image && /* @__PURE__ */ React.createElement("img", {
+    src: tier.image,
+    alt: "",
+    style: {
+      width: 28,
+      height: 28,
+      objectFit: "contain",
+      imageRendering: "pixelated"
+    }
+  }), /* @__PURE__ */ React.createElement("span", {
+    style: {
+      fontFamily: "'Press Start 2P', monospace",
+      fontSize: 9,
+      color: tier.color
+    }
+  }, tier.label)), /* @__PURE__ */ React.createElement("span", {
+    style: {
+      fontFamily: "'VT323', monospace",
+      fontSize: 15,
+      color: C.boneDim
+    }
+  }, unopenedByTier[tier.key], " unopened")), /* @__PURE__ */ React.createElement("div", {
+    style: {
+      fontFamily: "'VT323', monospace",
+      fontSize: 13,
+      color: C.boneDim,
+      marginBottom: 8
+    }
+  }, desc), /* @__PURE__ */ React.createElement(Btn, {
+    onClick: () => openChest(tier.key),
+    color: tier.color,
+    disabled: unopenedByTier[tier.key] <= 0,
+    full: true
+  }, unopenedByTier[tier.key] > 0 ? `Open (${unopenedByTier[tier.key]} left)` : "No chests to open"))), lootItems.length > 0 && /* @__PURE__ */ React.createElement("div", {
+    style: {
+      marginTop: 16
+    }
+  }, /* @__PURE__ */ React.createElement("div", {
+    style: {
+      display: "flex",
+      justifyContent: "space-between",
+      alignItems: "center",
+      marginBottom: 8
+    }
+  }, /* @__PURE__ */ React.createElement("div", {
+    style: {
+      fontFamily: "'Press Start 2P', monospace",
+      fontSize: 8,
+      color: C.boneDim
+    }
+  }, "INVENTORY — ", lootItems.length), /* @__PURE__ */ React.createElement(Btn, {
+    small: true,
+    color: mergeMode ? C.magenta : C.panelHi,
+    onClick: toggleMergeMode
+  }, mergeMode ? "Cancel merge" : "Merge items")), /* @__PURE__ */ React.createElement("div", {
+    style: {
+      display: "flex",
+      flexWrap: "wrap",
+      gap: 6,
+      marginBottom: 6
+    }
+  }, [["all", "ALL"], ...GEAR_SLOTS.map(s => [s.key, s.label]), ["wall", "WALL"]].map(([key, label]) => /* @__PURE__ */ React.createElement(Btn, {
+    key: key,
+    small: true,
+    color: invFilterSlot === key ? C.cyan : C.panelHi,
+    onClick: () => setInvFilterSlot(key)
+  }, label))), /* @__PURE__ */ React.createElement("div", {
+    style: {
+      display: "flex",
+      flexWrap: "wrap",
+      gap: 6,
+      marginBottom: 10
+    }
+  }, [["all", "ALL"], ["common", "COMMON"], ["rare", "RARE"], ["epic", "EPIC"], ["legendary", "LEGENDARY"]].map(([key, label]) => /* @__PURE__ */ React.createElement(Btn, {
+    key: key,
+    small: true,
+    color: invFilterRarity === key ? key === "all" ? C.cyan : RARITY[key].color : C.panelHi,
+    onClick: () => setInvFilterRarity(key)
+  }, label))), (() => {
+    const invFiltered = lootItems.filter(item => invFilterSlot === "all" || item.slot === invFilterSlot).filter(item => invFilterRarity === "all" || item.rarity === invFilterRarity).slice().sort((a, b) => a.date < b.date ? 1 : -1);
+    return /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("div", {
+      style: {
+        maxHeight: 220,
+        overflowY: "auto",
+        border: `1px solid ${C.panelHi}`,
+        padding: 8
+      }
+    }, invFiltered.length === 0 ? /* @__PURE__ */ React.createElement("div", {
+      style: {
+        fontFamily: "'VT323', monospace",
+        fontSize: 15,
+        color: C.boneDim
+      }
+    }, "Nothing matches these filters.") : /* @__PURE__ */ React.createElement("div", {
       style: {
         display: "flex",
-        justifyContent: "space-between",
-        alignItems: "flex-start",
-        padding: "8px 0",
-        borderBottom: `1px solid ${C.panelHi}`
+        flexWrap: "wrap",
+        gap: 6
       }
-    },
-    /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { fontFamily: "'VT323', monospace", fontSize: 18, color: C.bone } }, label), /* @__PURE__ */ React.createElement("div", { style: { fontFamily: "'VT323', monospace", fontSize: 14, color: C.boneDim } }, note)),
-    /* @__PURE__ */ React.createElement("div", { style: { fontFamily: "'Press Start 2P', monospace", fontSize: 11, color: C.magenta } }, "+", val)
-  )), /* @__PURE__ */ React.createElement(
-    "div",
-    {
+    }, invFiltered.map(item => /* @__PURE__ */ React.createElement("button", {
+      key: item.id,
+      onClick: () => mergeMode ? toggleMergeSelect(item.id) : setInvSelectedId(invSelectedId === item.id ? null : item.id),
+      title: item.name,
       style: {
+        width: 48,
+        height: 48,
+        border: `2px solid ${mergeMode ? mergeSelected.includes(item.id) ? C.green : RARITY[item.rarity].color : invSelectedId === item.id ? C.cyan : RARITY[item.rarity].color}`,
+        background: C.bgDeep,
+        padding: 3,
+        cursor: "pointer",
         display: "flex",
-        justifyContent: "space-between",
-        paddingTop: 10
+        alignItems: "center",
+        justifyContent: "center",
+        opacity: mergeMode && !mergeSelected.includes(item.id) && mergeSelected.length >= 5 ? 0.4 : 1
       }
-    },
-    /* @__PURE__ */ React.createElement("span", { style: { fontFamily: "'VT323', monospace", fontSize: 18, color: C.boneDim } }, "TOTAL"),
-    /* @__PURE__ */ React.createElement("span", { style: { fontFamily: "'Press Start 2P', monospace", fontSize: 11, color: C.bone } }, xpBreakdown.total, " XP")
-  )), /* @__PURE__ */ React.createElement(Panel, { style: { padding: 14 } }, /* @__PURE__ */ React.createElement(
-    "div",
-    {
+    }, item.image ? /* @__PURE__ */ React.createElement("img", {
+      src: item.image,
+      alt: item.name,
       style: {
-        display: "flex",
-        justifyContent: "space-between",
-        alignItems: "baseline",
-        marginBottom: 10
+        maxWidth: "100%",
+        maxHeight: "100%",
+        objectFit: "contain",
+        imageRendering: "pixelated"
       }
-    },
-    /* @__PURE__ */ React.createElement("span", { style: { fontFamily: "'Press Start 2P', monospace", fontSize: 10, color: C.bone } }, "TITLES"),
-    /* @__PURE__ */ React.createElement("span", { style: { fontFamily: "'VT323', monospace", fontSize: 16, color: C.boneDim } }, earnedSet.size, "/", TITLES.length)
-  ), /* @__PURE__ */ React.createElement(XPBar, { pct: earnedSet.size / TITLES.length, color: C.gold, segments: TITLES.length }), /* @__PURE__ */ React.createElement("div", { style: { marginTop: 16, maxHeight: 320, overflowY: "auto" } }, TITLES.map((t) => {
+    }) : /* @__PURE__ */ React.createElement("span", {
+      style: {
+        fontFamily: "'Press Start 2P', monospace",
+        fontSize: 14,
+        color: C.boneDim
+      }
+    }, "?"))))), mergeMode && /* @__PURE__ */ React.createElement("div", {
+      style: {
+        marginTop: 10,
+        paddingTop: 10,
+        borderTop: `1px solid ${C.panelHi}`
+      }
+    }, /* @__PURE__ */ React.createElement("div", {
+      style: {
+        fontFamily: "'VT323', monospace",
+        fontSize: 14,
+        color: C.boneDim,
+        marginBottom: 8
+      }
+    }, "Pick 5 items of the same rarity to fuse into 1 random item of the next rarity up. Wall holds only fuse with other wall holds. Legendary items can't be merged."), /* @__PURE__ */ React.createElement("div", {
+      style: {
+        fontFamily: "'VT323', monospace",
+        fontSize: 15,
+        color: mergeError ? C.red : C.boneDim,
+        marginBottom: 8
+      }
+    }, mergeSelected.length, "/5 selected", mergeError ? ` — ${mergeError}` : ""), /* @__PURE__ */ React.createElement(Btn, {
+      onClick: doMerge,
+      color: C.green,
+      disabled: !canMerge,
+      full: true
+    }, "Merge")), !mergeMode && invSelectedId && (() => {
+      const item = invFiltered.find(i => i.id === invSelectedId);
+      if (!item) return null;
+      const canEquip = GEAR_SLOTS.some(s => s.key === item.slot);
+      const isEquipped = equippedItems[item.slot] === item.id;
+      return /* @__PURE__ */ React.createElement("div", {
+        style: {
+          marginTop: 10,
+          paddingTop: 10,
+          borderTop: `1px solid ${C.panelHi}`,
+          display: "flex",
+          alignItems: "center",
+          gap: 12
+        }
+      }, item.image && /* @__PURE__ */ React.createElement("img", {
+        src: item.image,
+        alt: item.name,
+        style: {
+          width: 48,
+          height: 48,
+          objectFit: "contain",
+          imageRendering: "pixelated",
+          flexShrink: 0
+        }
+      }), /* @__PURE__ */ React.createElement("div", {
+        style: {
+          flex: 1,
+          minWidth: 0
+        }
+      }, /* @__PURE__ */ React.createElement("div", {
+        style: {
+          fontFamily: "'VT323', monospace",
+          fontSize: 17,
+          color: C.bone
+        }
+      }, item.name || `${GEAR_SLOTS.find(s => s.key === item.slot)?.label || item.slot.toUpperCase()} TOKEN`), /* @__PURE__ */ React.createElement("div", {
+        style: {
+          fontFamily: "'VT323', monospace",
+          fontSize: 13,
+          color: RARITY[item.rarity].color
+        }
+      }, RARITY[item.rarity].label), canEquip && /* @__PURE__ */ React.createElement("div", {
+        style: {
+          marginTop: 6
+        }
+      }, /* @__PURE__ */ React.createElement(Btn, {
+        small: true,
+        color: isEquipped ? C.gold : C.cyan,
+        onClick: () => isEquipped ? unequipGearSlot(item.slot) : equipGearItem(item)
+      }, isEquipped ? "Equipped — tap for auto" : "Equip to Gear Rack"))));
+    })());
+  })()), /* @__PURE__ */ React.createElement("div", {
+    style: {
+      marginTop: 16,
+      paddingTop: 12,
+      borderTop: `1px solid ${C.panelHi}`
+    }
+  }, /* @__PURE__ */ React.createElement(Btn, {
+    onClick: resetItems,
+    color: confirmingReset ? C.red : C.panelHi,
+    small: true
+  }, confirmingReset ? "Tap again to confirm reset" : "Reset items"), /* @__PURE__ */ React.createElement("div", {
+    style: {
+      fontFamily: "'VT323', monospace",
+      fontSize: 13,
+      color: C.boneDim,
+      marginTop: 6
+    }
+  }, "Clears all unlocked items and placed wall holds back to the starter set — use this if a catalog art update left you with stale images. Doesn't touch your benchmarks or training log."))), /* @__PURE__ */ React.createElement(Panel, {
+    style: {
+      padding: 14,
+      marginBottom: 14
+    }
+  }, /* @__PURE__ */ React.createElement("div", {
+    style: {
+      fontFamily: "'Press Start 2P', monospace",
+      fontSize: 9,
+      color: C.magenta,
+      marginBottom: 12
+    }
+  }, "TRAINING XP BREAKDOWN"), [["Sessions & benchmarks logged", xpBreakdown.activity, `capped at ${DAILY_ACTIVITY_XP_CAP}/day — rest days count too`], ["New ranks reached", xpBreakdown.rankUps, `${RANK_UP_XP} XP each, once per new best`], ["Weeks trained", xpBreakdown.consistency, `${CONSISTENCY_XP_PER_WEEK} XP per distinct week active`], ["Weekly quests completed", xpBreakdown.quests, "varies per quest — see WEEKLY QUESTS above"]].map(([label, val, note]) => /* @__PURE__ */ React.createElement("div", {
+    key: label,
+    style: {
+      display: "flex",
+      justifyContent: "space-between",
+      alignItems: "flex-start",
+      padding: "8px 0",
+      borderBottom: `1px solid ${C.panelHi}`
+    }
+  }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", {
+    style: {
+      fontFamily: "'VT323', monospace",
+      fontSize: 18,
+      color: C.bone
+    }
+  }, label), /* @__PURE__ */ React.createElement("div", {
+    style: {
+      fontFamily: "'VT323', monospace",
+      fontSize: 14,
+      color: C.boneDim
+    }
+  }, note)), /* @__PURE__ */ React.createElement("div", {
+    style: {
+      fontFamily: "'Press Start 2P', monospace",
+      fontSize: 11,
+      color: C.magenta
+    }
+  }, "+", val))), /* @__PURE__ */ React.createElement("div", {
+    style: {
+      display: "flex",
+      justifyContent: "space-between",
+      paddingTop: 10
+    }
+  }, /* @__PURE__ */ React.createElement("span", {
+    style: {
+      fontFamily: "'VT323', monospace",
+      fontSize: 18,
+      color: C.boneDim
+    }
+  }, "TOTAL"), /* @__PURE__ */ React.createElement("span", {
+    style: {
+      fontFamily: "'Press Start 2P', monospace",
+      fontSize: 11,
+      color: C.bone
+    }
+  }, xpBreakdown.total, " XP"))), /* @__PURE__ */ React.createElement(Panel, {
+    style: {
+      padding: 14
+    }
+  }, /* @__PURE__ */ React.createElement("div", {
+    style: {
+      display: "flex",
+      justifyContent: "space-between",
+      alignItems: "baseline",
+      marginBottom: 10
+    }
+  }, /* @__PURE__ */ React.createElement("span", {
+    style: {
+      fontFamily: "'Press Start 2P', monospace",
+      fontSize: 10,
+      color: C.bone
+    }
+  }, "TITLES"), /* @__PURE__ */ React.createElement("span", {
+    style: {
+      fontFamily: "'VT323', monospace",
+      fontSize: 16,
+      color: C.boneDim
+    }
+  }, earnedSet.size, "/", TITLES.length)), /* @__PURE__ */ React.createElement(XPBar, {
+    pct: earnedSet.size / TITLES.length,
+    color: C.gold,
+    segments: TITLES.length
+  }), /* @__PURE__ */ React.createElement("div", {
+    style: {
+      marginTop: 16,
+      maxHeight: 320,
+      overflowY: "auto"
+    }
+  }, TITLES.map(t => {
     const earned = earnedSet.has(t.id);
     const rarity = RARITY[t.rarity];
     const isEquipped = data.profile.equippedTitleId === t.id;
-    return /* @__PURE__ */ React.createElement(
-      "div",
-      {
-        key: t.id,
-        onClick: () => earned && toggleEquip(t.id),
-        style: {
-          padding: "10px 10px",
-          marginBottom: 6,
-          background: isEquipped ? rarity.color : "transparent",
-          borderLeft: `4px solid ${earned ? rarity.color : C.panelHi}`,
-          cursor: earned ? "pointer" : "default"
-        }
-      },
-      /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 } }, /* @__PURE__ */ React.createElement(
-        "span",
-        {
-          style: {
-            fontFamily: "'Press Start 2P', monospace",
-            fontSize: 9,
-            color: isEquipped ? C.bgDeep : earned ? C.bone : C.boneDim
-          }
-        },
-        earned ? "" : "\u{1F512} ",
-        t.name
-      ), /* @__PURE__ */ React.createElement(
-        "span",
-        {
-          style: {
-            fontFamily: "'Press Start 2P', monospace",
-            fontSize: 7,
-            color: isEquipped ? C.bgDeep : rarity.color,
-            whiteSpace: "nowrap"
-          }
-        },
-        rarity.label
-      )),
-      /* @__PURE__ */ React.createElement(
-        "div",
-        {
-          style: {
-            fontFamily: "'VT323', monospace",
-            fontSize: 15,
-            color: isEquipped ? C.bgDeep : C.boneDim,
-            marginTop: 4
-          }
-        },
-        t.desc
-      )
-    );
-  }))), /* @__PURE__ */ React.createElement(DataPanel, { data, persist }), /* @__PURE__ */ React.createElement(LootReveal, { item: revealItem, onClose: () => setRevealItem(null) }));
+    return /* @__PURE__ */ React.createElement("div", {
+      key: t.id,
+      onClick: () => earned && toggleEquip(t.id),
+      style: {
+        padding: "10px 10px",
+        marginBottom: 6,
+        background: isEquipped ? rarity.color : "transparent",
+        borderLeft: `4px solid ${earned ? rarity.color : C.panelHi}`,
+        cursor: earned ? "pointer" : "default"
+      }
+    }, /* @__PURE__ */ React.createElement("div", {
+      style: {
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "center",
+        gap: 8
+      }
+    }, /* @__PURE__ */ React.createElement("span", {
+      style: {
+        fontFamily: "'Press Start 2P', monospace",
+        fontSize: 9,
+        color: isEquipped ? C.bgDeep : earned ? C.bone : C.boneDim
+      }
+    }, earned ? "" : "🔒 ", t.name), /* @__PURE__ */ React.createElement("span", {
+      style: {
+        fontFamily: "'Press Start 2P', monospace",
+        fontSize: 7,
+        color: isEquipped ? C.bgDeep : rarity.color,
+        whiteSpace: "nowrap"
+      }
+    }, rarity.label)), /* @__PURE__ */ React.createElement("div", {
+      style: {
+        fontFamily: "'VT323', monospace",
+        fontSize: 15,
+        color: isEquipped ? C.bgDeep : C.boneDim,
+        marginTop: 4
+      }
+    }, t.desc));
+  }))), /* @__PURE__ */ React.createElement(DataPanel, {
+    data: data,
+    persist: persist
+  }), /* @__PURE__ */ React.createElement(LootReveal, {
+    item: revealItem,
+    onClose: () => setRevealItem(null)
+  }));
 }
 function StatsTab({ data, bw, persist }) {
   const [open, setOpen] = useState(null);

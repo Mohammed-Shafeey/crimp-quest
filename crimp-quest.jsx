@@ -682,6 +682,56 @@ const rollLoot = (tierKey = "standard", data) => {
   };
 };
 
+/* --------------------------- MERGING --------------------------------- */
+/* Duplicate-protection valve for the inventory: 5 same-rarity items fuse
+   into 1 random item of the next rarity up. Wall holds only ever fuse
+   with other wall holds (so a merge never turns shoes into a hold or
+   vice versa) — everything else (shoes/chalk/harness/trainingTool) can
+   fuse across types since they're all just gear-rack cosmetics. Legendary
+   is the ceiling so it's excluded from selection entirely. */
+const RARITY_UPGRADE = { common: "rare", rare: "epic", epic: "legendary" };
+
+const rollMergeResult = (selected, data) => {
+  const catalog = getEffectiveCatalog(data);
+  const rarity = selected[0].rarity;
+  const nextRarity = RARITY_UPGRADE[rarity];
+  const isHoldMerge = selected.every((i) => i.slot === "wall");
+  const gearSlots = LOOT_SLOTS.filter((s) => s !== "wall");
+  const slot = isHoldMerge ? "wall" : gearSlots[Math.floor(Math.random() * gearSlots.length)];
+
+  // Same clamp-to-prefab logic as rollLoot: regular wall holds cap at
+  // epic, so a wall merge landing on legendary always means a prefab.
+  let isPrefab = false;
+  let effectiveRarity = nextRarity;
+  let candidates = null;
+  if (slot === "wall" && nextRarity === "legendary") {
+    const prefabs = catalog.wallPrefabs?.legendary;
+    if (prefabs && prefabs.length) {
+      isPrefab = true;
+      candidates = prefabs;
+    } else {
+      effectiveRarity = "epic";
+    }
+  }
+  if (!candidates) candidates = catalog[slot]?.[effectiveRarity];
+
+  const catalogItem = candidates && candidates.length
+    ? candidates[Math.floor(Math.random() * candidates.length)]
+    : null;
+
+  return {
+    id: uid(),
+    tier: "merge",
+    rarity: effectiveRarity,
+    slot,
+    isPrefab,
+    date: today(),
+    ...(catalogItem
+      ? { itemId: catalogItem.id, name: catalogItem.name, image: catalogItem.image, w: catalogItem.w, h: catalogItem.h }
+      : {}),
+  };
+};
+
 /* ---------------------------- TITLES ------------------------------- */
 /* Each title is derived live from data (entries/sessions), not stored
    as an "unlocked" flag — so there's nothing to desync or migrate.
@@ -3190,6 +3240,43 @@ function ProfileTab({ data, bw, persist }) {
     });
   };
 
+  const [mergeMode, setMergeMode] = useState(false);
+  const [mergeSelected, setMergeSelected] = useState([]);
+  const toggleMergeMode = () => {
+    setMergeMode((m) => !m);
+    setMergeSelected([]);
+    setInvSelectedId(null);
+  };
+  const toggleMergeSelect = (id) => {
+    setMergeSelected((prev) => {
+      if (prev.includes(id)) return prev.filter((x) => x !== id);
+      if (prev.length >= 5) return prev;
+      return [...prev, id];
+    });
+  };
+  const mergeSelectedItems = lootItems.filter((i) => mergeSelected.includes(i.id));
+  let mergeError = "";
+  if (mergeSelectedItems.length === 5) {
+    const mergeRarity = mergeSelectedItems[0].rarity;
+    if (mergeRarity === "legendary") mergeError = "Legendary items can't be merged.";
+    else if (!mergeSelectedItems.every((i) => i.rarity === mergeRarity)) mergeError = "All 5 must be the same rarity.";
+    else {
+      const isHold = mergeSelectedItems.every((i) => i.slot === "wall");
+      const isGear = mergeSelectedItems.every((i) => i.slot !== "wall");
+      if (!isHold && !isGear) mergeError = "Wall holds can only merge with other wall holds.";
+    }
+  }
+  const canMerge = mergeSelectedItems.length === 5 && !mergeError;
+  const doMerge = () => {
+    if (!canMerge) return;
+    const removeIds = new Set(mergeSelectedItems.map((i) => i.id));
+    const merged = rollMergeResult(mergeSelectedItems, data);
+    persist((prev) => ({ ...prev, loot: [...(prev.loot || []).filter((i) => !removeIds.has(i.id)), merged] }));
+    setRevealItem(merged);
+    setMergeSelected([]);
+    setMergeMode(false);
+  };
+
   const saveName = () => {
     const v = nameEdit.trim() || "CLIMBER";
     persist((prev) => ({ ...prev, profile: { ...prev.profile, name: v } }));
@@ -3466,13 +3553,24 @@ function ProfileTab({ data, bw, persist }) {
           <div style={{ marginTop: 16 }}>
             <div
               style={{
-                fontFamily: "'Press Start 2P', monospace",
-                fontSize: 8,
-                color: C.boneDim,
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
                 marginBottom: 8,
               }}
             >
-              INVENTORY — {lootItems.length}
+              <div
+                style={{
+                  fontFamily: "'Press Start 2P', monospace",
+                  fontSize: 8,
+                  color: C.boneDim,
+                }}
+              >
+                INVENTORY — {lootItems.length}
+              </div>
+              <Btn small color={mergeMode ? C.magenta : C.panelHi} onClick={toggleMergeMode}>
+                {mergeMode ? "Cancel merge" : "Merge items"}
+              </Btn>
             </div>
 
             <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 6 }}>
@@ -3530,18 +3628,31 @@ function ProfileTab({ data, bw, persist }) {
                         {invFiltered.map((item) => (
                           <button
                             key={item.id}
-                            onClick={() => setInvSelectedId(invSelectedId === item.id ? null : item.id)}
+                            onClick={() =>
+                              mergeMode
+                                ? toggleMergeSelect(item.id)
+                                : setInvSelectedId(invSelectedId === item.id ? null : item.id)
+                            }
                             title={item.name}
                             style={{
                               width: 48,
                               height: 48,
-                              border: `2px solid ${invSelectedId === item.id ? C.cyan : RARITY[item.rarity].color}`,
+                              border: `2px solid ${
+                                mergeMode
+                                  ? mergeSelected.includes(item.id)
+                                    ? C.green
+                                    : RARITY[item.rarity].color
+                                  : invSelectedId === item.id
+                                  ? C.cyan
+                                  : RARITY[item.rarity].color
+                              }`,
                               background: C.bgDeep,
                               padding: 3,
                               cursor: "pointer",
                               display: "flex",
                               alignItems: "center",
                               justifyContent: "center",
+                              opacity: mergeMode && !mergeSelected.includes(item.id) && mergeSelected.length >= 5 ? 0.4 : 1,
                             }}
                           >
                             {item.image ? (
@@ -3561,7 +3672,29 @@ function ProfileTab({ data, bw, persist }) {
                     )}
                   </div>
 
-                  {invSelectedId &&
+                  {mergeMode && (
+                    <div style={{ marginTop: 10, paddingTop: 10, borderTop: `1px solid ${C.panelHi}` }}>
+                      <div style={{ fontFamily: "'VT323', monospace", fontSize: 14, color: C.boneDim, marginBottom: 8 }}>
+                        Pick 5 items of the same rarity to fuse into 1 random item of the next rarity up.
+                        Wall holds only fuse with other wall holds. Legendary items can't be merged.
+                      </div>
+                      <div
+                        style={{
+                          fontFamily: "'VT323', monospace",
+                          fontSize: 15,
+                          color: mergeError ? C.red : C.boneDim,
+                          marginBottom: 8,
+                        }}
+                      >
+                        {mergeSelected.length}/5 selected{mergeError ? ` — ${mergeError}` : ""}
+                      </div>
+                      <Btn onClick={doMerge} color={C.green} disabled={!canMerge} full>
+                        Merge
+                      </Btn>
+                    </div>
+                  )}
+
+                  {!mergeMode && invSelectedId &&
                     (() => {
                       const item = invFiltered.find((i) => i.id === invSelectedId);
                       if (!item) return null;
