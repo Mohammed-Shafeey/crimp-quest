@@ -212,7 +212,7 @@ const holdDisplayPct = (item) => {
   const pct = item.w * HOLD_PX_TO_WALL_PCT;
   return Math.max(HOLD_MIN_PCT, Math.min(HOLD_MAX_PCT, pct));
 };
-/* Three independent chest tiers, each earned a different way:
+/* Four independent chest tiers, each earned a different way:
    - DAILY: earned by logging your first session of a calendar day.
      Can't drop legendary — this is the low-stakes, frequent chest.
    - STANDARD: earned per Training Level gained, plus a bonus for
@@ -220,11 +220,16 @@ const holdDisplayPct = (item) => {
    - RANK: earned per genuine rank-up event on any benchmark (same
      events that already grant Rank-Up XP). No commons at all, and
      weighted hard toward epic/legendary — this is the reward for
-     actually getting stronger, not just logging activity. */
+     actually getting stronger, not just logging activity.
+   - HOLDBOX: earned once per calendar day the app is opened at all —
+     doesn't require logging a session or entry, just showing up. Only
+     ever drops wall slot items (holds, or a boulder prefab on a
+     legendary roll) — never gear. */
 const CHEST_TIERS = {
   daily: {
     key: "daily",
-    label: "DAILY CHEST",
+    label: "COMMON CHEST",
+    image: "data:image/png;base64,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",
     color: C.cyan,
     weights: [
       ["common", 60],
@@ -234,23 +239,37 @@ const CHEST_TIERS = {
   },
   standard: {
     key: "standard",
-    label: "CHEST",
+    label: "GOLD CHEST",
+    image: "data:image/png;base64,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",
     color: C.gold,
     weights: [
-      ["common", 50],
+      ["common", 52],
       ["rare", 30],
       ["epic", 15],
-      ["legendary", 5],
+      ["legendary", 3],
     ],
   },
   rankup: {
     key: "rankup",
-    label: "RANK CHEST",
+    label: "MYTHICAL CHEST",
+    image: "data:image/png;base64,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",
     color: C.magenta,
     weights: [
-      ["rare", 35],
-      ["epic", 40],
-      ["legendary", 25],
+      ["rare", 50],
+      ["epic", 38],
+      ["legendary", 12],
+    ],
+  },
+  holdbox: {
+    key: "holdbox",
+    label: "MYSTERY HOLD BOX",
+    image: "data:image/png;base64,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",
+    color: C.green,
+    weights: [
+      ["common", 55],
+      ["rare", 30],
+      ["epic", 12],
+      ["legendary", 3],
     ],
   },
 };
@@ -605,7 +624,8 @@ const rollLoot = (tierKey = "standard", data) => {
     }
     r -= w;
   }
-  const slot = LOOT_SLOTS[Math.floor(Math.random() * LOOT_SLOTS.length)];
+  // Mystery Hold Box only ever drops wall items — never rolls a gear slot.
+  const slot = tierKey === "holdbox" ? "wall" : LOOT_SLOTS[Math.floor(Math.random() * LOOT_SLOTS.length)];
 
   // Wall + legendary: give a boulder prefab if one exists (real legendary
   // drop, placed as a whole unit). If none exist yet, clamp to epic like
@@ -917,7 +937,14 @@ const trainingLevelFromXP = (xp) => {
    running best tier actually increases. A fatigued/lower reading never
    claws back XP already earned — matches how "best" works everywhere
    else in the app. Returns both the event count (used to earn Rank
-   Chests) and the XP total (used in the Training XP breakdown). */
+   Chests) and the XP total (used in the Training XP breakdown).
+
+   The first entry in a series only establishes a baseline — it isn't a
+   "rank up" yet, since there's nothing prior to improve on. Without this,
+   logging your starting numbers across all benchmarks (up to 6 series,
+   counting both hands) pays out a rank-up for every single one in one
+   sitting, which is a wall of free XP/chests for onboarding rather than
+   the reward for genuinely getting stronger. */
 const rankUpEventsForSeries = (entries, scale, bw) => {
   const sorted = entries.slice().sort((a, b) => (a.date < b.date ? -1 : 1));
   let bestTier = -1;
@@ -925,7 +952,7 @@ const rankUpEventsForSeries = (entries, scale, bw) => {
   sorted.forEach((e) => {
     const t = tierIndex(scale, scale.metric(e, bw));
     if (t > bestTier) {
-      count += 1;
+      if (bestTier >= 0) count += 1;
       bestTier = t;
     }
   });
@@ -1130,38 +1157,20 @@ const defaultLoot = () => [
 
 const seed = () => ({
   profile: {
-    bodyweight: 64,
     name: "CLIMBER",
     equippedTitleId: null,
     // No gym access right now — quest pool stays home-only until this
     // is flipped on. Toggle lives on the Profile tab.
     gymAccess: false,
   },
-  entries: [
-    { id: "s1", scale: "twoArm", date: "2026-07-07", added: 35, hand: "", note: "Near limit, could go slightly higher" },
-    { id: "s2", scale: "oneArm", date: "2026-07-07", assist: 8, hand: "R", note: "Peak, brief hold" },
-    { id: "s3", scale: "oneArm", date: "2026-07-07", assist: 13, hand: "L", note: "" },
-    { id: "s4", scale: "pinch", date: "2026-07-07", load: 25, hand: "R", note: "Fresh, felt like more in the tank" },
-    { id: "s5", scale: "repeaters", date: "2026-07-14", reps: 11.5, hand: "", note: "First real baseline. Readiness 7/10, post-comp" },
-    { id: "s6", scale: "oneArm", date: "2026-07-14", assist: 13, hand: "R", note: "Fatigued — post-comp, not a true max" },
-  ],
-  sessions: [
-    {
-      id: "l1",
-      date: "2026-07-14",
-      type: "REPEATERS",
-      sets: 3,
-      reps: 6,
-      load: "bodyweight",
-      readiness: 7,
-      note: "After benchmark. Forearms cooked, tendons fine.",
-    },
-  ],
+  entries: [],
+  sessions: [],
   quests: [], // weekly quest draws: [{ weekKey, questIds: [...5] }]
   loot: defaultLoot(), // opened chest items: [{ id, rarity, slot, date, itemId?, name?, image? }]
   wallHolds: [], // placed holds: [{ id, lootItemId, x, y }] — x/y are 0-1 fractions of the wall image
   customItems: [], // user-added catalog items: [{ id, slot, rarity, name, image, w, h }]
   equippedItems: {}, // manual gear-rack picks: { shoes: lootItemId, chalk: ..., harness: ..., trainingTool: ... } — falls back to highest-rarity owned if a slot has no entry
+  loginDates: [], // calendar dates the app was opened — earn-rate for the Mystery Hold Box, independent of logging a session
 });
 
 /* --------------------------- HELPERS ------------------------------ */
@@ -1203,6 +1212,59 @@ const bestForHand = (entries, scale, bw, hand) => {
 const uid = () => Math.random().toString(36).slice(2, 9);
 const today = () => new Date().toISOString().slice(0, 10);
 
+/* Shared short WebAudio blip for passive feedback (XP toast, level-up
+   reveal) — separate from TimerTab's own beep, which has its own local
+   mute toggle scoped to the timer only. */
+let sharedAudioCtx = null;
+const playTone = (freq, dur = 0.09, gain = 0.05) => {
+  try {
+    if (!sharedAudioCtx) {
+      sharedAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    }
+    const ctx = sharedAudioCtx;
+    const o = ctx.createOscillator();
+    const g = ctx.createGain();
+    o.type = "square";
+    o.frequency.value = freq;
+    g.gain.value = gain;
+    o.connect(g);
+    g.connect(ctx.destination);
+    o.start();
+    o.stop(ctx.currentTime + dur);
+  } catch {
+    /* audio unavailable — silent */
+  }
+};
+
+/* Plays a short sequence of notes via playTone. Each entry is either a
+   single frequency or an array of frequencies played together (a chord).
+   The final note rings out longer than the rest for a satisfying finish. */
+const playJingle = (notes, opts = {}) => {
+  const { step = 100, noteDur = 0.11, gain = 0.05 } = opts;
+  notes.forEach((note, i) => {
+    const freqs = Array.isArray(note) ? note : [note];
+    const isLast = i === notes.length - 1;
+    setTimeout(() => {
+      freqs.forEach((f) => playTone(f, isLast ? noteDur * 2.5 : noteDur, gain));
+    }, i * step);
+  });
+};
+
+/* Loot-reveal jingle — an ascending arpeggio that gets longer and ends in
+   a bigger chord the higher the rarity, so cracking a legendary feels
+   more rewarding than a common. */
+const RARITY_JINGLE = {
+  common: [523.25, 659.25],
+  rare: [523.25, 659.25, 783.99],
+  epic: [523.25, 659.25, 783.99, 1046.5],
+  legendary: [523.25, 659.25, 783.99, 1046.5, 1318.51, [1046.5, 1318.51, 1567.98]],
+};
+
+/* Fanfare played on the full-screen level-up reveal — fixed length since
+   there's no rarity axis for a level-up, just a bigger finish than the
+   plain XP toast's two-note chime. */
+const LEVEL_UP_JINGLE = [523.25, 659.25, 783.99, 1046.5, [783.99, 1046.5, 1318.51]];
+
 /* ------------------------- PIXEL PRIMITIVES ----------------------- */
 
 const Panel = ({ children, style = {}, accent }) => (
@@ -1235,6 +1297,7 @@ const XPBar = ({ pct, color, segments = 20 }) => {
             background: i < filled ? color : C.bgDeep,
             boxShadow:
               i < filled ? `inset 0 -3px 0 rgba(0,0,0,0.35)` : "none",
+            transition: "background 0.2s ease",
           }}
         />
       ))}
@@ -1269,7 +1332,7 @@ const Btn = ({ children, onClick, color = C.magenta, small, disabled, full }) =>
 );
 
 const Field = ({ label, children }) => (
-  <label style={{ display: "block", marginBottom: 10 }}>
+  <div style={{ display: "block", marginBottom: 10 }}>
     <div
       style={{
         fontFamily: "'Press Start 2P', monospace",
@@ -1282,11 +1345,12 @@ const Field = ({ label, children }) => (
       {label}
     </div>
     {children}
-  </label>
+  </div>
 );
 
 const inputStyle = {
   width: "100%",
+  boxSizing: "border-box",
   background: C.bgDeep,
   color: C.bone,
   border: `2px solid ${C.panelHi}`,
@@ -1351,6 +1415,18 @@ export default function CrimpQuest() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data && (data.quests || []).some((r) => r.weekKey === weekKeyOf(today()))]);
 
+  /* -------- daily login streak — records today's date the first time the
+     app is opened each day, independent of whether a session/entry gets
+     logged. Drives the Mystery Hold Box earn-rate. -------- */
+  useEffect(() => {
+    if (!data) return;
+    const t = today();
+    if (!(data.loginDates || []).includes(t)) {
+      persist((prev) => ({ ...prev, loginDates: [...(prev.loginDates || []), t] }));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data && (data.loginDates || []).includes(today())]);
+
   const bw = data?.profile?.bodyweight || 64;
 
   /* -------- rank level (best-ever benchmarks) -------- */
@@ -1367,6 +1443,47 @@ export default function CrimpQuest() {
     trainingLevel >= TRAINING_LEVEL_MAX
       ? 1
       : (trainingXP - thisThresh) / (nextThresh - thisThresh);
+
+  /* -------- XP gain / level-up feedback — compares this render's
+     training XP/level against the last one it saw, so any action
+     anywhere in the app (not just Profile) can trigger the toast or
+     the level-up reveal. First render after data loads just sets the
+     baseline silently — a returning high-level user shouldn't get a
+     level-up popup just for opening the app. -------- */
+  const [xpToast, setXpToast] = useState(null);
+  const [levelUp, setLevelUp] = useState(null);
+  const xpTrackRef = useRef(null);
+
+  useEffect(() => {
+    if (!data) return;
+    if (xpTrackRef.current === null) {
+      xpTrackRef.current = { xp: trainingXP, level: trainingLevel };
+      return;
+    }
+    const prev = xpTrackRef.current;
+    if (trainingXP === prev.xp) return;
+    const delta = trainingXP - prev.xp;
+    xpTrackRef.current = { xp: trainingXP, level: trainingLevel };
+    if (delta <= 0) return; // only celebrate gains — imports/edits can lower recomputed XP
+
+    if (trainingLevel > prev.level) {
+      setLevelUp({ level: trainingLevel, chestsUnlocked: trainingLevel - prev.level });
+    } else {
+      const prevThresh = trainingLevelThreshold(prev.level);
+      const prevNextThresh =
+        prev.level < TRAINING_LEVEL_MAX ? trainingLevelThreshold(prev.level + 1) : prevThresh;
+      const prevPct =
+        prev.level >= TRAINING_LEVEL_MAX ? 1 : (prev.xp - prevThresh) / (prevNextThresh - prevThresh);
+      setXpToast({ id: uid(), delta, prevPct, nextPct: trainingPct });
+    }
+    // `loading` is in the deps (not just for its own sake) so this still
+    // fires the instant data becomes available even for a brand-new
+    // account sitting at exactly 0 XP both before and after load — without
+    // it, trainingXP/trainingLevel would be identical across that
+    // transition and the baseline would never actually get set, silently
+    // swallowing that account's very first real XP gain.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, trainingXP, trainingLevel]);
 
   const equippedTitle =
     data && data.profile.equippedTitleId
@@ -1625,6 +1742,9 @@ export default function CrimpQuest() {
         reconstruction of Lattice's chart, converted with your assumed 0.90
         edge coefficient. Treat all of it as a training signal, not a ranking.
       </div>
+
+      {xpToast && <XPToast toast={xpToast} onDone={() => setXpToast(null)} />}
+      <LevelUpReveal info={levelUp} onClose={() => setLevelUp(null)} />
     </Shell>
   );
 }
@@ -1653,8 +1773,20 @@ function Shell({ children }) {
             transparent 1px, transparent 3px);
         }
         input, select, textarea { border-radius: 0 !important; }
+        .cq-rays { animation: cqspin 14s linear infinite; }
+        @keyframes cqspin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        .cq-pop { animation: cqpop 0.4s cubic-bezier(0.34, 1.56, 0.64, 1); }
+        @keyframes cqpop { 0% { transform: scale(0.2); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
+        .cq-toast-in { animation: cqtoastin 0.3s ease-out; }
+        @keyframes cqtoastin { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+        .cq-toast-out { animation: cqtoastout 0.4s ease-in forwards; }
+        @keyframes cqtoastout { from { transform: translateY(0); opacity: 1; } to { transform: translateY(10px); opacity: 0; } }
         @media (prefers-reduced-motion: reduce) {
           .cq-blink { animation: none; }
+          .cq-rays { animation: none; }
+          .cq-pop { animation: none; }
+          .cq-toast-in { animation: none; }
+          .cq-toast-out { animation: none; }
         }
       `}</style>
       <div className="cq-scan" />
@@ -1766,6 +1898,11 @@ function GearRack({ name, lootItems, equippedItems }) {
               <div style={{ fontFamily: "'VT323', monospace", fontSize: 21, color: C.bone }}>
                 {slot.label}
               </div>
+              {featured && (
+                <div style={{ fontFamily: "'VT323', monospace", fontSize: 15, color: RARITY[featured.rarity].color }}>
+                  {featured.name || `${slot.label} TOKEN`}
+                </div>
+              )}
               {items.length === 0 ? (
                 <div style={{ fontFamily: "'VT323', monospace", fontSize: 16, color: C.boneDim }}>
                   empty — unlock via LOOT
@@ -2611,6 +2748,302 @@ function DataPanel({ data, persist }) {
   );
 }
 
+/* -------------------------- LOOT REVEAL ----------------------------- */
+/* Full-screen chest-opening reveal — spinning rarity-colored sunburst
+   behind the item, tap anywhere to dismiss. Purely cosmetic; the loot
+   item itself is already persisted by the time this renders. */
+
+function LootReveal({ item, onClose }) {
+  useEffect(() => {
+    if (!item) return;
+    playJingle(RARITY_JINGLE[item.rarity] || RARITY_JINGLE.common);
+  }, [item]);
+
+  if (!item) return null;
+  const rarity = RARITY[item.rarity];
+  const color = rarity.color;
+  const slotLabel = item.isPrefab
+    ? "WALL PREFAB"
+    : GEAR_SLOTS.find((s) => s.key === item.slot)?.label || (item.slot || "").toUpperCase();
+
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: "fixed",
+        inset: 0,
+        zIndex: 200,
+        background: "rgba(12,10,28,0.92)",
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: 20,
+        cursor: "pointer",
+      }}
+    >
+      <div
+        style={{
+          position: "relative",
+          width: 320,
+          height: 320,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        <div
+          className="cq-rays"
+          style={{
+            position: "absolute",
+            inset: -80,
+            borderRadius: "50%",
+            background: `repeating-conic-gradient(${color}55 0deg 6deg, transparent 6deg 24deg)`,
+          }}
+        />
+        <div
+          style={{
+            position: "absolute",
+            inset: -25,
+            borderRadius: "50%",
+            background: `radial-gradient(circle, ${color}66 0%, transparent 70%)`,
+          }}
+        />
+        {item.image ? (
+          <img
+            src={item.image}
+            alt={item.name}
+            className="cq-pop"
+            style={{
+              position: "relative",
+              width: 260,
+              height: 260,
+              objectFit: "contain",
+              imageRendering: "pixelated",
+              filter: `drop-shadow(0 0 20px ${color})`,
+            }}
+          />
+        ) : (
+          <div
+            className="cq-pop"
+            style={{
+              position: "relative",
+              width: 140,
+              height: 140,
+              background: C.panelHi,
+              border: `4px solid ${color}`,
+            }}
+          />
+        )}
+      </div>
+
+      <div
+        style={{
+          fontFamily: "'Press Start 2P', monospace",
+          fontSize: 10,
+          color,
+          marginTop: 22,
+          letterSpacing: 1,
+        }}
+      >
+        {rarity.label}
+      </div>
+      <div
+        style={{
+          fontFamily: "'Press Start 2P', monospace",
+          fontSize: 14,
+          color: C.bone,
+          marginTop: 10,
+          textAlign: "center",
+        }}
+      >
+        {item.name || `${slotLabel} TOKEN`}
+      </div>
+      <div style={{ fontFamily: "'VT323', monospace", fontSize: 16, color: C.boneDim, marginTop: 4 }}>
+        {slotLabel}
+      </div>
+      <div style={{ fontFamily: "'VT323', monospace", fontSize: 14, color: C.boneDim, marginTop: 26 }}>
+        Tap anywhere to continue
+      </div>
+    </div>
+  );
+}
+
+/* Small transient card at the bottom of the screen whenever Training XP
+   increases — shows the XP gained and animates the training bar filling
+   from its old position to its new one. Auto-dismisses; no interaction
+   needed. Skipped in favor of LevelUpReveal when the gain also crosses a
+   level threshold, so the two never stack. */
+function XPToast({ toast, onDone }) {
+  const [animPct, setAnimPct] = useState(toast.prevPct);
+  const [closing, setClosing] = useState(false);
+
+  useEffect(() => {
+    playTone(660, 0.07, 0.045);
+    const chime = setTimeout(() => playTone(880, 0.09, 0.045), 90);
+
+    const DURATION = 650;
+    const start = performance.now();
+    let raf;
+    const step = (now) => {
+      const p = Math.min(1, (now - start) / DURATION);
+      const eased = 1 - Math.pow(1 - p, 2);
+      setAnimPct(toast.prevPct + (toast.nextPct - toast.prevPct) * eased);
+      if (p < 1) raf = requestAnimationFrame(step);
+    };
+    raf = requestAnimationFrame(step);
+
+    const closeTimer = setTimeout(() => setClosing(true), 2400);
+    const doneTimer = setTimeout(onDone, 2800);
+
+    return () => {
+      clearTimeout(chime);
+      clearTimeout(closeTimer);
+      clearTimeout(doneTimer);
+      cancelAnimationFrame(raf);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [toast.id]);
+
+  return (
+    <div
+      style={{
+        position: "fixed",
+        left: "50%",
+        bottom: 20,
+        transform: "translateX(-50%)",
+        zIndex: 150,
+        width: "min(340px, calc(100vw - 32px))",
+        pointerEvents: "none",
+      }}
+    >
+      <div
+        className={closing ? "cq-toast-out" : "cq-toast-in"}
+        style={{
+          background: C.panel,
+          border: `2px solid ${C.magenta}`,
+          boxShadow: `0 0 0 2px ${C.bgDeep}, 0 8px 24px rgba(0,0,0,0.5)`,
+          padding: 12,
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "baseline",
+            marginBottom: 8,
+          }}
+        >
+          <span style={{ fontFamily: "'Press Start 2P', monospace", fontSize: 9, color: C.magenta }}>
+            TRAINING XP
+          </span>
+          <span style={{ fontFamily: "'Press Start 2P', monospace", fontSize: 11, color: C.green }}>
+            +{toast.delta}
+          </span>
+        </div>
+        <XPBar pct={animPct} color={C.magenta} segments={16} />
+      </div>
+    </div>
+  );
+}
+
+/* Full-screen level-up reveal — same sunburst treatment as LootReveal,
+   fired when Training Level actually increases (not just XP gained).
+   Shows the new level and the Gold Chest(s) it unlocks — Training Level
+   is already the earn-rate for the standard chest tier (see CHEST_TIERS),
+   so this is a real reward already granted, not something invented for
+   the popup. */
+function LevelUpReveal({ info, onClose }) {
+  useEffect(() => {
+    if (!info) return;
+    playJingle(LEVEL_UP_JINGLE);
+  }, [info]);
+
+  if (!info) return null;
+  const color = C.magenta;
+
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: "fixed",
+        inset: 0,
+        zIndex: 210,
+        background: "rgba(12,10,28,0.92)",
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: 20,
+        cursor: "pointer",
+      }}
+    >
+      <div
+        style={{
+          position: "relative",
+          width: 240,
+          height: 240,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        <div
+          className="cq-rays"
+          style={{
+            position: "absolute",
+            inset: -80,
+            borderRadius: "50%",
+            background: `repeating-conic-gradient(${color}55 0deg 6deg, transparent 6deg 24deg)`,
+          }}
+        />
+        <div
+          style={{
+            position: "absolute",
+            inset: -25,
+            borderRadius: "50%",
+            background: `radial-gradient(circle, ${color}66 0%, transparent 70%)`,
+          }}
+        />
+        <div
+          className="cq-pop"
+          style={{
+            position: "relative",
+            fontFamily: "'Press Start 2P', monospace",
+            fontSize: 64,
+            color: C.bone,
+            textShadow: `4px 4px 0 ${color}`,
+          }}
+        >
+          {info.level}
+        </div>
+      </div>
+
+      <div style={{ fontFamily: "'Press Start 2P', monospace", fontSize: 12, color, marginTop: 18, letterSpacing: 1 }}>
+        LEVEL UP
+      </div>
+      <div style={{ fontFamily: "'VT323', monospace", fontSize: 20, color: C.bone, marginTop: 6 }}>
+        TRAINING LVL {info.level}
+      </div>
+
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 22 }}>
+        <img
+          src={CHEST_TIERS.standard.image}
+          alt=""
+          style={{ width: 40, height: 40, objectFit: "contain", imageRendering: "pixelated" }}
+        />
+        <div style={{ fontFamily: "'VT323', monospace", fontSize: 18, color: C.gold }}>
+          +{info.chestsUnlocked} GOLD CHEST{info.chestsUnlocked > 1 ? "S" : ""}
+        </div>
+      </div>
+
+      <div style={{ fontFamily: "'VT323', monospace", fontSize: 14, color: C.boneDim, marginTop: 26 }}>
+        Tap anywhere to continue
+      </div>
+    </div>
+  );
+}
+
 /* --------------------------- PROFILE ------------------------------- */
 
 function ProfileTab({ data, bw, persist }) {
@@ -2633,6 +3066,7 @@ function ProfileTab({ data, bw, persist }) {
     daily: daysActive,
     standard: trainingLevel - 1 + questBonusWeeks,
     rankup: rankUpEvents,
+    holdbox: (data.loginDates || []).length,
   };
   // Legacy items (opened before tiers existed) have no .tier — treat them
   // as standard so they still count against that pool rather than vanishing.
@@ -2640,16 +3074,23 @@ function ProfileTab({ data, bw, persist }) {
     daily: lootItems.filter((i) => i.tier === "daily").length,
     standard: lootItems.filter((i) => i.tier === "standard" || !i.tier).length,
     rankup: lootItems.filter((i) => i.tier === "rankup").length,
+    holdbox: lootItems.filter((i) => i.tier === "holdbox").length,
   };
   const unopenedByTier = {
     daily: Math.max(0, earnedByTier.daily - openedByTier.daily),
     standard: Math.max(0, earnedByTier.standard - openedByTier.standard),
     rankup: Math.max(0, earnedByTier.rankup - openedByTier.rankup),
+    holdbox: Math.max(0, earnedByTier.holdbox - openedByTier.holdbox),
   };
 
+  const [revealItem, setRevealItem] = useState(null);
   const openChest = (tierKey) => {
     if (unopenedByTier[tierKey] <= 0) return;
-    persist((prev) => ({ ...prev, loot: [...(prev.loot || []), rollLoot(tierKey, prev)] }));
+    // Rolled once here (not inside persist's updater) so the reveal shows
+    // exactly the item that got saved, not a second independent roll.
+    const item = rollLoot(tierKey, data);
+    persist((prev) => ({ ...prev, loot: [...(prev.loot || []), item] }));
+    setRevealItem(item);
   };
 
   const [confirmingReset, setConfirmingReset] = useState(false);
@@ -2759,6 +3200,8 @@ function ProfileTab({ data, bw, persist }) {
           </div>
         )}
       </Panel>
+
+      <GearRack name={data.profile.name} lootItems={lootItems} equippedItems={data.equippedItems} />
 
       <Panel style={{ padding: 14, marginBottom: 14 }} accent={C.cyan}>
         <div
@@ -2897,24 +3340,38 @@ function ProfileTab({ data, bw, persist }) {
         {[
           {
             tier: CHEST_TIERS.daily,
-            desc: "Log your first session of a day. Never drops legendary.",
+            desc: "First session of the day. Never legendary.",
             earned: earnedByTier.daily,
           },
           {
             tier: CHEST_TIERS.standard,
-            desc: "1 per Training Level gained, +1 per week you fully clear all 5 quests.",
+            desc: "1 per Training Level, +1 per full quest week.",
             earned: earnedByTier.standard,
           },
           {
             tier: CHEST_TIERS.rankup,
-            desc: "1 per genuine new rank on any benchmark. Never common — weighted toward epic/legendary.",
+            desc: "1 per new rank. No commons — mostly epic/legendary.",
             earned: earnedByTier.rankup,
+          },
+          {
+            tier: CHEST_TIERS.holdbox,
+            desc: "1 per day you open the app. Holds & prefabs only.",
+            earned: earnedByTier.holdbox,
           },
         ].map(({ tier, desc }) => (
           <div key={tier.key} style={{ marginBottom: 14, paddingBottom: 14, borderBottom: `1px solid ${C.panelHi}` }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4 }}>
-              <span style={{ fontFamily: "'Press Start 2P', monospace", fontSize: 9, color: tier.color }}>
-                {tier.label}
+              <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                {tier.image && (
+                  <img
+                    src={tier.image}
+                    alt=""
+                    style={{ width: 28, height: 28, objectFit: "contain", imageRendering: "pixelated" }}
+                  />
+                )}
+                <span style={{ fontFamily: "'Press Start 2P', monospace", fontSize: 9, color: tier.color }}>
+                  {tier.label}
+                </span>
               </span>
               <span style={{ fontFamily: "'VT323', monospace", fontSize: 15, color: C.boneDim }}>
                 {unopenedByTier[tier.key]} unopened
@@ -3097,10 +3554,6 @@ function ProfileTab({ data, bw, persist }) {
         </div>
       </Panel>
 
-      <DataPanel data={data} persist={persist} />
-
-      <GearRack name={data.profile.name} lootItems={lootItems} equippedItems={data.equippedItems} />
-
       <Panel style={{ padding: 14, marginBottom: 14 }}>
         <div
           style={{
@@ -3223,6 +3676,10 @@ function ProfileTab({ data, bw, persist }) {
           })}
         </div>
       </Panel>
+
+      <DataPanel data={data} persist={persist} />
+
+      <LootReveal item={revealItem} onClose={() => setRevealItem(null)} />
     </div>
   );
 }
@@ -3701,6 +4158,8 @@ function ScaleCard({ scale, entries, bw, open, onToggle, onAdd, onDelete }) {
 
 /* --------------------------- TIMER -------------------------------- */
 
+const GRACE_SECONDS = 5;
+
 function TimerTab() {
   const [work, setWork] = useState(7);
   const [rest, setRest] = useState(3);
@@ -3710,10 +4169,19 @@ function TimerTab() {
   const [sound, setSound] = useState(true);
 
   const [running, setRunning] = useState(false);
-  const [phase, setPhase] = useState("idle"); // idle | hang | rest | setrest | done
+  const [phase, setPhase] = useState("idle"); // idle | grace | hang | rest | setrest | done
   const [left, setLeft] = useState(0);
   const [rep, setRep] = useState(1);
   const [set, setSet] = useState(1);
+
+  // Tracks whether `phase` just changed this render — lets the swipe-fill
+  // below skip its transition for exactly one render, so it teleports back
+  // to the start instead of animating backward across the whole card.
+  const prevPhaseRef = useRef(phase);
+  const phaseJustChanged = phase !== prevPhaseRef.current;
+  useEffect(() => {
+    prevPhaseRef.current = phase;
+  }, [phase]);
 
   const audioRef = useRef(null);
 
@@ -3750,12 +4218,12 @@ function TimerTab() {
   };
 
   const start = () => {
-    setPhase("hang");
-    setLeft(work);
+    setPhase("grace");
+    setLeft(GRACE_SECONDS);
     setRep(1);
     setSet(1);
     setRunning(true);
-    beep(880);
+    beep(220);
   };
 
   useEffect(() => {
@@ -3768,6 +4236,13 @@ function TimerTab() {
       }
 
       // countdown hit zero — advance the phase
+      if (phase === "grace") {
+        setPhase("hang");
+        setLeft(work);
+        beep(880);
+        return;
+      }
+
       if (phase === "hang") {
         if (rep >= reps) {
           if (set >= sets) {
@@ -3807,10 +4282,20 @@ function TimerTab() {
   }, [running, left, phase, rep, set, reps, sets, work, rest, betweenSets, beep]);
 
   const phaseColor =
-    phase === "hang" ? C.magenta : phase === "rest" ? C.cyan : phase === "setrest" ? C.gold : C.boneDim;
+    phase === "grace"
+      ? C.red
+      : phase === "hang"
+      ? C.magenta
+      : phase === "rest"
+      ? C.cyan
+      : phase === "setrest"
+      ? C.gold
+      : C.boneDim;
 
   const phaseLabel =
-    phase === "hang"
+    phase === "grace"
+      ? "GET READY"
+      : phase === "hang"
       ? "HANG"
       : phase === "rest"
       ? "REST"
@@ -3820,69 +4305,104 @@ function TimerTab() {
       ? "DONE"
       : "READY";
 
+  // Total seconds for whatever phase is active — drives the swipe-fill
+  // below, which grows toward 100% as `left` approaches 0. Denominator is
+  // (total - 1), not total, so the fill actually reaches the right edge on
+  // the last displayed second instead of capping just short of it.
+  const phaseTotal =
+    phase === "grace" ? GRACE_SECONDS : phase === "hang" ? work : phase === "rest" ? rest : phase === "setrest" ? betweenSets : 0;
+  const fillPct =
+    phaseTotal > 1
+      ? Math.min(100, Math.max(0, ((phaseTotal - left) / (phaseTotal - 1)) * 100))
+      : phaseTotal === 1
+      ? 100
+      : 0;
+
   return (
     <div>
-      <Panel style={{ padding: 20, marginBottom: 14, textAlign: "center" }} accent={phaseColor}>
-        <div
-          style={{
-            fontFamily: "'Press Start 2P', monospace",
-            fontSize: 14,
-            color: phaseColor,
-            marginBottom: 16,
-          }}
-        >
-          {phaseLabel}
-        </div>
-        <div
-          style={{
-            fontFamily: "'Press Start 2P', monospace",
-            fontSize: 52,
-            color: C.bone,
-            lineHeight: 1.1,
-            textShadow: `4px 4px 0 ${phaseColor}`,
-            marginBottom: 18,
-          }}
-        >
-          {phase === "idle" ? work : phase === "done" ? "★" : left}
-        </div>
+      <Panel
+        style={{ padding: 20, marginBottom: 14, textAlign: "center", position: "relative", overflow: "hidden" }}
+        accent={phaseColor}
+      >
+        {phaseTotal > 0 && (
+          <div
+            style={{
+              position: "absolute",
+              top: 0,
+              left: 0,
+              bottom: 0,
+              width: `${fillPct}%`,
+              background: `${phaseColor}33`,
+              // Skip the transition for the one render where the phase just
+              // changed, so the bar teleports back to empty instead of
+              // sliding backward across the whole card.
+              transition: phaseJustChanged ? "none" : "width 1s linear",
+              pointerEvents: "none",
+            }}
+          />
+        )}
+        <div style={{ position: "relative" }}>
+          <div
+            style={{
+              fontFamily: "'Press Start 2P', monospace",
+              fontSize: 14,
+              color: phaseColor,
+              marginBottom: 16,
+            }}
+          >
+            {phaseLabel}
+          </div>
+          <div
+            style={{
+              fontFamily: "'Press Start 2P', monospace",
+              fontSize: 52,
+              color: C.bone,
+              lineHeight: 1.1,
+              textShadow: `4px 4px 0 ${phaseColor}`,
+              marginBottom: 18,
+            }}
+          >
+            {phase === "idle" ? work : phase === "done" ? "★" : left}
+          </div>
 
-        <div style={{ display: "flex", justifyContent: "center", gap: 24, marginBottom: 18 }}>
-          <div>
-            <div style={{ fontFamily: "'VT323', monospace", fontSize: 16, color: C.boneDim }}>REP</div>
-            <div style={{ fontFamily: "'Press Start 2P', monospace", fontSize: 14, color: C.bone }}>
-              {rep}/{reps}
+          <div style={{ display: "flex", justifyContent: "center", gap: 24, marginBottom: 18 }}>
+            <div>
+              <div style={{ fontFamily: "'VT323', monospace", fontSize: 16, color: C.boneDim }}>REP</div>
+              <div style={{ fontFamily: "'Press Start 2P', monospace", fontSize: 14, color: C.bone }}>
+                {rep}/{reps}
+              </div>
+            </div>
+            <div>
+              <div style={{ fontFamily: "'VT323', monospace", fontSize: 16, color: C.boneDim }}>SET</div>
+              <div style={{ fontFamily: "'Press Start 2P', monospace", fontSize: 14, color: C.bone }}>
+                {set}/{sets}
+              </div>
             </div>
           </div>
-          <div>
-            <div style={{ fontFamily: "'VT323', monospace", fontSize: 16, color: C.boneDim }}>SET</div>
-            <div style={{ fontFamily: "'Press Start 2P', monospace", fontSize: 14, color: C.bone }}>
-              {set}/{sets}
-            </div>
-          </div>
-        </div>
 
-        <div style={{ display: "flex", gap: 8, justifyContent: "center" }}>
-          {!running && phase !== "done" && (
-            <Btn onClick={start} color={C.magenta}>
-              Start
+          <div style={{ display: "flex", gap: 8, justifyContent: "center" }}>
+            {!running && phase !== "done" && (
+              <Btn onClick={start} color={C.magenta}>
+                Start
+              </Btn>
+            )}
+            {running && (
+              <Btn onClick={() => setRunning(false)} color={C.gold}>
+                Pause
+              </Btn>
+            )}
+            {!running && phase !== "idle" && phase !== "done" && (
+              <Btn onClick={() => setRunning(true)} color={C.green}>
+                Resume
+              </Btn>
+            )}
+            <Btn onClick={reset} color={C.panelHi}>
+              Reset
             </Btn>
-          )}
-          {running && (
-            <Btn onClick={() => setRunning(false)} color={C.gold}>
-              Pause
+            <Btn onClick={() => setSound(!sound)} color={sound ? C.cyan : C.panelHi} small>
+              {sound ? "🔊" : "🔇"}
             </Btn>
-          )}
-          {!running && phase !== "idle" && phase !== "done" && (
-            <Btn onClick={() => setRunning(true)} color={C.green}>
-              Resume
-            </Btn>
-          )}
-          <Btn onClick={reset} color={C.panelHi}>
-            Reset
-          </Btn>
-          <Btn onClick={() => setSound(!sound)} color={sound ? C.cyan : C.panelHi} small>
-            {sound ? "🔊" : "🔇"}
-          </Btn>
+          </div>
         </div>
       </Panel>
 
@@ -3930,6 +4450,111 @@ function TimerTab() {
 
 /* ----------------------------- LOG -------------------------------- */
 
+/* GitHub-style contribution grid — one column per week, one cell per
+   day, colored by how many sessions were logged that day. A full year
+   doesn't fit a phone screen, so the grid scrolls horizontally inside
+   its own container instead of squeezing the rest of the page. */
+const ACTIVITY_WEEKS = 53;
+const MONTH_ABBR = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
+
+const activityColor = (count) => {
+  if (count <= 0) return C.panelHi;
+  if (count === 1) return `${C.green}50`;
+  if (count === 2) return `${C.green}9A`;
+  return C.green;
+};
+
+function ActivityGrid({ sessions }) {
+  const byDate = {};
+  sessions.forEach((s) => {
+    byDate[s.date] = (byDate[s.date] || 0) + 1;
+  });
+
+  const todayD = new Date(today() + "T00:00:00");
+  const end = new Date(todayD);
+  end.setDate(end.getDate() + (6 - end.getDay()));
+  const start = new Date(end);
+  start.setDate(start.getDate() - (ACTIVITY_WEEKS * 7 - 1));
+
+  const weeks = [];
+  const cursor = new Date(start);
+  for (let w = 0; w < ACTIVITY_WEEKS; w++) {
+    const days = [];
+    for (let d = 0; d < 7; d++) {
+      const dateStr = cursor.toISOString().slice(0, 10);
+      days.push({
+        date: dateStr,
+        count: byDate[dateStr] || 0,
+        future: cursor > todayD,
+        isFirstOfMonth: cursor.getDate() === 1,
+        month: cursor.getMonth(),
+      });
+      cursor.setDate(cursor.getDate() + 1);
+    }
+    weeks.push(days);
+  }
+
+  let lastMonth = -1;
+  const monthLabels = weeks.map((days) => {
+    const marker = days.find((d) => d.isFirstOfMonth);
+    if (marker && marker.month !== lastMonth) {
+      lastMonth = marker.month;
+      return MONTH_ABBR[marker.month];
+    }
+    return "";
+  });
+
+  return (
+    <div style={{ overflowX: "auto", paddingBottom: 6 }}>
+      <div style={{ display: "flex", gap: 3, width: "max-content" }}>
+        {weeks.map((days, wi) => (
+          <div key={wi} style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+            <div
+              style={{
+                height: 12,
+                fontFamily: "'VT323', monospace",
+                fontSize: 11,
+                color: C.boneDim,
+                whiteSpace: "nowrap",
+              }}
+            >
+              {monthLabels[wi]}
+            </div>
+            {days.map((day) => (
+              <div
+                key={day.date}
+                title={day.future ? "" : `${day.date} — ${day.count} session${day.count === 1 ? "" : "s"}`}
+                style={{
+                  width: 11,
+                  height: 11,
+                  borderRadius: 2,
+                  background: day.future ? "transparent" : activityColor(day.count),
+                }}
+              />
+            ))}
+          </div>
+        ))}
+      </div>
+      <div style={{ display: "flex", alignItems: "center", gap: 4, marginTop: 8 }}>
+        <span style={{ fontFamily: "'VT323', monospace", fontSize: 14, color: C.boneDim }}>Less</span>
+        {[0, 1, 2, 3].map((lvl) => (
+          <div key={lvl} style={{ width: 11, height: 11, borderRadius: 2, background: activityColor(lvl) }} />
+        ))}
+        <span style={{ fontFamily: "'VT323', monospace", fontSize: 14, color: C.boneDim }}>More</span>
+      </div>
+    </div>
+  );
+}
+
+const formatDayHeader = (dateStr) => {
+  const d = new Date(dateStr + "T00:00:00");
+  return d
+    .toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })
+    .toUpperCase();
+};
+
+const LOG_DAYS_PER_PAGE = 5;
+
 function LogTab({ data, persist }) {
   const [form, setForm] = useState({
     date: today(),
@@ -3940,17 +4565,27 @@ function LogTab({ data, persist }) {
     readiness: 7,
     note: "",
   });
+  const [page, setPage] = useState(0);
 
   const add = () => {
     const s = { id: uid(), ...form };
     persist((prev) => ({ ...prev, sessions: [s, ...prev.sessions] }));
     setForm({ ...form, sets: "", reps: "", load: "", note: "" });
+    setPage(0);
   };
 
   const del = (id) =>
     persist((prev) => ({ ...prev, sessions: prev.sessions.filter((s) => s.id !== id) }));
 
   const sessions = [...data.sessions].sort((a, b) => (a.date < b.date ? 1 : -1));
+  const grouped = {};
+  sessions.forEach((s) => {
+    (grouped[s.date] = grouped[s.date] || []).push(s);
+  });
+  const dates = Object.keys(grouped).sort((a, b) => (a < b ? 1 : -1));
+  const pageCount = Math.max(1, Math.ceil(dates.length / LOG_DAYS_PER_PAGE));
+  const safePage = Math.min(page, pageCount - 1);
+  const pageDates = dates.slice(safePage * LOG_DAYS_PER_PAGE, safePage * LOG_DAYS_PER_PAGE + LOG_DAYS_PER_PAGE);
 
   return (
     <div>
@@ -4043,66 +4678,121 @@ function LogTab({ data, persist }) {
         </Btn>
       </Panel>
 
-      {sessions.length === 0 ? (
+      <Panel style={{ padding: 14, marginBottom: 14 }}>
+        <div
+          style={{
+            fontFamily: "'Press Start 2P', monospace",
+            fontSize: 9,
+            color: C.green,
+            marginBottom: 12,
+          }}
+        >
+          ACTIVITY
+        </div>
+        <ActivityGrid sessions={sessions} />
+      </Panel>
+
+      {dates.length === 0 ? (
         <Panel style={{ padding: 20, textAlign: "center" }}>
           <div style={{ fontFamily: "'VT323', monospace", fontSize: 20, color: C.boneDim }}>
             No sessions logged. Train something.
           </div>
         </Panel>
       ) : (
-        sessions.map((s) => (
-          <Panel key={s.id} style={{ padding: 12, marginBottom: 8 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-              <div style={{ flex: 1 }}>
+        pageDates.map((date) => (
+          <Panel key={date} style={{ padding: 12, marginBottom: 8 }}>
+            <div
+              style={{
+                fontFamily: "'Press Start 2P', monospace",
+                fontSize: 9,
+                color: C.gold,
+                marginBottom: 10,
+              }}
+            >
+              {formatDayHeader(date)}
+            </div>
+            {grouped[date].map((s, i) => {
+              const parts = [];
+              if (s.sets && s.reps) parts.push(`${s.sets}×${s.reps}`);
+              if (s.load) parts.push(s.load);
+              return (
                 <div
+                  key={s.id}
                   style={{
-                    fontFamily: "'Press Start 2P', monospace",
-                    fontSize: 9,
-                    color: C.cyan,
-                    marginBottom: 6,
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "flex-start",
+                    paddingTop: i > 0 ? 10 : 0,
+                    marginTop: i > 0 ? 10 : 0,
+                    borderTop: i > 0 ? `1px solid ${C.panelHi}` : "none",
                   }}
                 >
-                  {s.type}
-                </div>
-                <div style={{ fontFamily: "'VT323', monospace", fontSize: 19, color: C.bone }}>
-                  {s.date}
-                  {s.sets && s.reps ? ` · ${s.sets}×${s.reps}` : ""}
-                  {s.load ? ` · ${s.load}` : ""}
-                </div>
-                <div style={{ fontFamily: "'VT323', monospace", fontSize: 17, color: C.gold }}>
-                  readiness {s.readiness}/10
-                </div>
-                {s.note && (
-                  <div
+                  <div style={{ flex: 1 }}>
+                    <div
+                      style={{
+                        fontFamily: "'Press Start 2P', monospace",
+                        fontSize: 9,
+                        color: C.cyan,
+                        marginBottom: 6,
+                      }}
+                    >
+                      {s.type}
+                    </div>
+                    {parts.length > 0 && (
+                      <div style={{ fontFamily: "'VT323', monospace", fontSize: 19, color: C.bone }}>
+                        {parts.join(" · ")}
+                      </div>
+                    )}
+                    <div style={{ fontFamily: "'VT323', monospace", fontSize: 17, color: C.gold }}>
+                      readiness {s.readiness}/10
+                    </div>
+                    {s.note && (
+                      <div
+                        style={{
+                          fontFamily: "'VT323', monospace",
+                          fontSize: 17,
+                          color: C.boneDim,
+                          lineHeight: 1.3,
+                          marginTop: 4,
+                        }}
+                      >
+                        {s.note}
+                      </div>
+                    )}
+                  </div>
+                  <button
+                    onClick={() => del(s.id)}
                     style={{
-                      fontFamily: "'VT323', monospace",
-                      fontSize: 17,
-                      color: C.boneDim,
-                      lineHeight: 1.3,
-                      marginTop: 4,
+                      background: "transparent",
+                      border: "none",
+                      color: C.red,
+                      fontFamily: "'Press Start 2P', monospace",
+                      fontSize: 8,
+                      cursor: "pointer",
+                      padding: 4,
                     }}
                   >
-                    {s.note}
-                  </div>
-                )}
-              </div>
-              <button
-                onClick={() => del(s.id)}
-                style={{
-                  background: "transparent",
-                  border: "none",
-                  color: C.red,
-                  fontFamily: "'Press Start 2P', monospace",
-                  fontSize: 8,
-                  cursor: "pointer",
-                  padding: 4,
-                }}
-              >
-                DEL
-              </button>
-            </div>
+                    DEL
+                  </button>
+                </div>
+              );
+            })}
           </Panel>
         ))
+      )}
+
+      {pageCount > 1 && (
+        <Panel style={{ padding: 10, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <Btn small disabled={safePage === 0} onClick={() => setPage(safePage - 1)}>
+            Prev
+          </Btn>
+          <div style={{ fontFamily: "'VT323', monospace", fontSize: 17, color: C.boneDim }}>
+            Page {safePage + 1} / {pageCount}
+          </div>
+          <Btn small disabled={safePage >= pageCount - 1} onClick={() => setPage(safePage + 1)}>
+            Next
+          </Btn>
+        </Panel>
       )}
     </div>
   );
