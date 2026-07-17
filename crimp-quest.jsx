@@ -767,6 +767,12 @@ const allBuiltInItems = () => {
   (GEAR_CATALOG.wallPrefabs?.legendary || []).forEach((it) => {
     out.push({ ...it, slot: "wallPrefab", rarity: "legendary", source: "built-in" });
   });
+  HOLD_SET_ORDER.forEach((setId) => {
+    const set = HOLD_SETS[setId];
+    set.holds.forEach((it) => {
+      out.push({ ...it, slot: "wallSet", rarity: set.rarity, source: "built-in", setName: set.name });
+    });
+  });
   return out;
 };
 
@@ -2846,7 +2852,7 @@ function ItemsPage({ data, persist, onBack }) {
   const [selectedKey, setSelectedKey] = useState(null);
 
   const customItems = data.customItems || [];
-  const SLOT_SORT_ORDER = ["shoes", "chalk", "harness", "trainingTool", "wall", "wallPrefab"];
+  const SLOT_SORT_ORDER = ["shoes", "chalk", "harness", "trainingTool", "wall", "wallPrefab", "wallSet"];
   const RARITY_SORT_ORDER = ["common", "rare", "epic", "legendary"];
   const allItems = [...allBuiltInItems(), ...customItems.map((i) => ({ ...i, source: "custom" }))].sort(
     (a, b) => {
@@ -2858,7 +2864,10 @@ function ItemsPage({ data, persist, onBack }) {
     }
   );
 
-  const slotOptions = [
+  // Set holds are system-only (never hand-uploaded), so they're excluded
+  // from the "add custom item" form's slot picker but still filterable
+  // and labeled correctly in the browsing list below.
+  const creatableSlotOptions = [
     ["shoes", "SHOES"],
     ["chalk", "CHALK"],
     ["harness", "HARNESS"],
@@ -2866,6 +2875,7 @@ function ItemsPage({ data, persist, onBack }) {
     ["wall", "WALL HOLD"],
     ["wallPrefab", "WALL PREFAB"],
   ];
+  const slotOptions = [...creatableSlotOptions, ["wallSet", "SET HOLD"]];
   const slotLabel = (key) => slotOptions.find((s) => s[0] === key)?.[1] || key.toUpperCase();
 
   const rarityDisabled = (r) => slot === "wall" && r === "legendary";
@@ -2972,7 +2982,7 @@ function ItemsPage({ data, persist, onBack }) {
 
         <Field label="SLOT">
           <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-            {slotOptions.map(([key, label]) => (
+            {creatableSlotOptions.map(([key, label]) => (
               <Btn key={key} small color={slot === key ? C.green : C.panelHi} onClick={() => setSlot(key)}>
                 {label}
               </Btn>
@@ -3173,6 +3183,7 @@ function ItemsPage({ data, persist, onBack }) {
                   </div>
                   <div style={{ fontFamily: "'VT323', monospace", fontSize: 14, color: RARITY[item.rarity].color }}>
                     {slotLabel(item.slot)} · {RARITY[item.rarity].label} · {item.source}
+                    {item.setName ? ` · ${item.setName}` : ""}
                   </div>
                   {item.source === "custom" && (
                     <div style={{ display: "flex", gap: 10, marginTop: 6 }}>
