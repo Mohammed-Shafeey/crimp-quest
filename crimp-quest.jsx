@@ -1644,6 +1644,12 @@ const RARITY_JINGLE = {
    plain XP toast's two-note chime. */
 const LEVEL_UP_JINGLE = [523.25, 659.25, 783.99, 1046.5, [783.99, 1046.5, 1318.51]];
 
+/* Quick two-note chimes for the Shop — ascending "cha-ching" for buying,
+   the mirrored descending version for selling, so the two are easy to
+   tell apart by ear without either one competing with the loot jingles. */
+const BUY_JINGLE = [659.25, 1046.5];
+const SELL_JINGLE = [1046.5, 659.25];
+
 /* ------------------------- PIXEL PRIMITIVES ----------------------- */
 
 const Panel = ({ children, style = {}, accent }) => (
@@ -2770,6 +2776,7 @@ function ShopTab({ data, persist }) {
       loot: [...(prev.loot || []), newItem],
       shop: { ...prev.shop, boughtSingleIds: [...prev.shop.boughtSingleIds, listing.id] },
     }));
+    playJingle(BUY_JINGLE);
   };
 
   const set = HOLD_SETS[shop.setId];
@@ -2796,6 +2803,7 @@ function ShopTab({ data, persist }) {
       loot: [...(prev.loot || []), ...newItems],
       shop: { ...prev.shop, setBought: true },
     }));
+    playJingle(BUY_JINGLE);
   };
 
   return (
@@ -4309,6 +4317,7 @@ function ProfileTab({ data, bw, persist }) {
                           coins: (prev.coins ?? 50) + sellPrice,
                           loot: (prev.loot || []).filter((i) => i.id !== item.id),
                         }));
+                        playJingle(SELL_JINGLE);
                         setInvSelectedId(null);
                       };
                       return (
@@ -5012,6 +5021,14 @@ function TimerTab() {
 
   const audioRef = useRef(null);
 
+  // Wall-clock timestamp (ms) for when the current phase's countdown hits
+  // zero. The tick below derives `left` from this against Date.now() every
+  // time it runs, rather than decrementing a counter — so the countdown
+  // keeps counting in real time even if the tab is backgrounded or the app
+  // is closed and reopened mid-phase, instead of silently pausing while no
+  // interval callbacks fire.
+  const endTimeRef = useRef(null);
+
   const beep = useCallback(
     (freq, dur = 0.09) => {
       if (!sound) return;
@@ -5042,30 +5059,38 @@ function TimerTab() {
     setLeft(0);
     setRep(1);
     setSet(1);
+    endTimeRef.current = null;
+  };
+
+  const startPhase = (nextPhase, seconds) => {
+    setPhase(nextPhase);
+    setLeft(seconds);
+    endTimeRef.current = Date.now() + seconds * 1000;
   };
 
   const start = () => {
-    setPhase("grace");
-    setLeft(GRACE_SECONDS);
     setRep(1);
     setSet(1);
     setRunning(true);
+    startPhase("grace", GRACE_SECONDS);
     beep(220);
   };
 
   useEffect(() => {
     if (!running) return;
-    const id = setInterval(() => {
-      if (left > 1) {
-        if (left <= 4) beep(440, 0.05);
-        setLeft(left - 1);
+
+    const tick = () => {
+      const remaining = Math.max(0, Math.round((endTimeRef.current - Date.now()) / 1000));
+
+      if (remaining > 0) {
+        if (remaining <= 3) beep(440, 0.05);
+        setLeft(remaining);
         return;
       }
 
       // countdown hit zero — advance the phase
       if (phase === "grace") {
-        setPhase("hang");
-        setLeft(work);
+        startPhase("hang", work);
         beep(880);
         return;
       }
@@ -5075,24 +5100,22 @@ function TimerTab() {
           if (set >= sets) {
             setRunning(false);
             setPhase("done");
+            endTimeRef.current = null;
             beep(1200, 0.4);
             return;
           }
-          setPhase("setrest");
-          setLeft(betweenSets);
+          startPhase("setrest", betweenSets);
           beep(660, 0.2);
           return;
         }
-        setPhase("rest");
-        setLeft(rest);
+        startPhase("rest", rest);
         beep(330);
         return;
       }
 
       if (phase === "rest") {
         setRep(rep + 1);
-        setPhase("hang");
-        setLeft(work);
+        startPhase("hang", work);
         beep(880);
         return;
       }
@@ -5100,12 +5123,23 @@ function TimerTab() {
       if (phase === "setrest") {
         setSet(set + 1);
         setRep(1);
-        setPhase("hang");
-        setLeft(work);
+        startPhase("hang", work);
         beep(880);
       }
-    }, 1000);
-    return () => clearInterval(id);
+    };
+
+    const id = setInterval(tick, 1000);
+    // Recompute the instant the tab/app becomes visible again instead of
+    // waiting up to a second for the next tick, so resuming from
+    // background shows the caught-up time immediately.
+    const onVisible = () => {
+      if (!document.hidden) tick();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      clearInterval(id);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
   }, [running, left, phase, rep, set, reps, sets, work, rest, betweenSets, beep]);
 
   const phaseColor =

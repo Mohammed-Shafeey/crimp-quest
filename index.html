@@ -1813,6 +1813,8 @@ const RARITY_JINGLE = {
   legendary: [523.25, 659.25, 783.99, 1046.5, 1318.51, [1046.5, 1318.51, 1567.98]]
 };
 const LEVEL_UP_JINGLE = [523.25, 659.25, 783.99, 1046.5, [783.99, 1046.5, 1318.51]];
+const BUY_JINGLE = [659.25, 1046.5];
+const SELL_JINGLE = [1046.5, 659.25];
 const Panel = ({ children, style = {}, accent }) => /* @__PURE__ */ React.createElement(
   "div",
   {
@@ -2836,6 +2838,7 @@ function ShopTab({
         boughtSingleIds: [...prev.shop.boughtSingleIds, listing.id]
       }
     }));
+    playJingle(BUY_JINGLE);
   };
   const set = HOLD_SETS[shop.setId];
   const setPrice = set ? RARITY_BUY_PRICE[set.rarity] * set.holds.length : 0;
@@ -2863,6 +2866,7 @@ function ShopTab({
         setBought: true
       }
     }));
+    playJingle(BUY_JINGLE);
   };
   return /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement(Panel, {
     style: {
@@ -4456,6 +4460,7 @@ function ProfileTab({
           coins: (prev.coins ?? 50) + sellPrice,
           loot: (prev.loot || []).filter(i => i.id !== item.id)
         }));
+        playJingle(SELL_JINGLE);
         setInvSelectedId(null);
       };
       return /* @__PURE__ */ React.createElement("div", {
@@ -5039,6 +5044,14 @@ function TimerTab() {
     prevPhaseRef.current = phase;
   }, [phase]);
   const audioRef = useRef(null);
+
+  // Wall-clock timestamp (ms) for when the current phase's countdown hits
+  // zero. The tick below derives `left` from this against Date.now() every
+  // time it runs, rather than decrementing a counter — so the countdown
+  // keeps counting in real time even if the tab is backgrounded or the app
+  // is closed and reopened mid-phase, instead of silently pausing while no
+  // interval callbacks fire.
+  const endTimeRef = useRef(null);
   const beep = useCallback((freq, dur = 0.09) => {
     if (!sound) return;
     try {
@@ -5065,28 +5078,33 @@ function TimerTab() {
     setLeft(0);
     setRep(1);
     setSet(1);
+    endTimeRef.current = null;
+  };
+  const startPhase = (nextPhase, seconds) => {
+    setPhase(nextPhase);
+    setLeft(seconds);
+    endTimeRef.current = Date.now() + seconds * 1000;
   };
   const start = () => {
-    setPhase("grace");
-    setLeft(GRACE_SECONDS);
     setRep(1);
     setSet(1);
     setRunning(true);
+    startPhase("grace", GRACE_SECONDS);
     beep(220);
   };
   useEffect(() => {
     if (!running) return;
-    const id = setInterval(() => {
-      if (left > 1) {
-        if (left <= 4) beep(440, 0.05);
-        setLeft(left - 1);
+    const tick = () => {
+      const remaining = Math.max(0, Math.round((endTimeRef.current - Date.now()) / 1000));
+      if (remaining > 0) {
+        if (remaining <= 3) beep(440, 0.05);
+        setLeft(remaining);
         return;
       }
 
       // countdown hit zero — advance the phase
       if (phase === "grace") {
-        setPhase("hang");
-        setLeft(work);
+        startPhase("hang", work);
         beep(880);
         return;
       }
@@ -5095,35 +5113,43 @@ function TimerTab() {
           if (set >= sets) {
             setRunning(false);
             setPhase("done");
+            endTimeRef.current = null;
             beep(1200, 0.4);
             return;
           }
-          setPhase("setrest");
-          setLeft(betweenSets);
+          startPhase("setrest", betweenSets);
           beep(660, 0.2);
           return;
         }
-        setPhase("rest");
-        setLeft(rest);
+        startPhase("rest", rest);
         beep(330);
         return;
       }
       if (phase === "rest") {
         setRep(rep + 1);
-        setPhase("hang");
-        setLeft(work);
+        startPhase("hang", work);
         beep(880);
         return;
       }
       if (phase === "setrest") {
         setSet(set + 1);
         setRep(1);
-        setPhase("hang");
-        setLeft(work);
+        startPhase("hang", work);
         beep(880);
       }
-    }, 1000);
-    return () => clearInterval(id);
+    };
+    const id = setInterval(tick, 1000);
+    // Recompute the instant the tab/app becomes visible again instead of
+    // waiting up to a second for the next tick, so resuming from
+    // background shows the caught-up time immediately.
+    const onVisible = () => {
+      if (!document.hidden) tick();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      clearInterval(id);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
   }, [running, left, phase, rep, set, reps, sets, work, rest, betweenSets, beep]);
   const phaseColor = phase === "grace" ? C.red : phase === "hang" ? C.magenta : phase === "rest" ? C.cyan : phase === "setrest" ? C.gold : C.boneDim;
   const phaseLabel = phase === "grace" ? "GET READY" : phase === "hang" ? "HANG" : phase === "rest" ? "REST" : phase === "setrest" ? "SET REST" : phase === "done" ? "DONE" : "READY";
@@ -5268,6 +5294,9 @@ function TimerTab() {
     }
   }, "Defaults are your endurance protocol: 5×6 at 7s on / 3s off, 50–60% of max load, 2–3 min between sets.")));
 }
+
+/* ----------------------------- LOG -------------------------------- */
+
 /* GitHub-style contribution grid — one column per week, one cell per
    day, colored by how many sessions were logged that day. A full year
    doesn't fit a phone screen, so the grid scrolls horizontally inside
